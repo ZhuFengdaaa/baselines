@@ -55,6 +55,24 @@ class DummyVecEnv(VecEnv):
         return (self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones),
                 self.buf_infos.copy())
 
+    def get_task_num(self):
+        task_num = self.envs[0].maze_dataset.task_num
+        for e in self.envs:
+            if task_num != e.maze_dataset.task_num:
+                assert(False)
+        return task_num
+
+    def get_task_name(self):
+        task_name = self.envs[0].maze_dataset.get_curr_maze()[0]
+        for e in self.envs:
+            if task_name != e.maze_dataset.get_curr_maze()[0]:
+                assert(False)
+        return task_name
+
+    def next_task(self):
+        for e in range(self.num_envs):
+            self.envs[e].next_task()
+
     def reset(self):
         for e in range(self.num_envs):
             obs = self.envs[e].reset()
