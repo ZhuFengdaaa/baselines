@@ -69,6 +69,10 @@ class DummyVecEnv(VecEnv):
                 assert(False)
         return task_name
 
+    def reset_task(self):
+        for e in range(self.num_envs):
+            self.envs[e].reset_task()
+
     def next_task(self):
         for e in range(self.num_envs):
             self.envs[e].next_task()

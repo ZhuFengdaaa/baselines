@@ -212,18 +212,21 @@ def main(args):
 
     model, env = train(args, extra_args)
 
-    if args.save_path is not None and rank == 0:
+    if hasattr(args, "save_path") and args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
         model.save(save_path)
 
     if args.play:
         logger.log("Running trained model")
+        obs = env.reset_task()
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
         dones = np.zeros((1,))
 
         episode_rew = 0
+        max_episode = 20
+        cnt_episode = 0
         while True:
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones)
@@ -236,8 +239,14 @@ def main(args):
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
                 print('episode_rew={}'.format(episode_rew))
+                cnt_episode += 1
+                print(cnt_episode)
                 episode_rew = 0
                 obs = env.reset()
+                if cnt_episode > max_episode:
+                    cnt_episode = 0
+                    if hasattr(env, "next_task"):
+                        env.next_task()
 
     env.close()
 
