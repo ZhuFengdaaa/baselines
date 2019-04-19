@@ -123,6 +123,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     task_num = env.get_task_num()
     for i_task in range(task_num):
+        if i_task > 0:
+            env.next_task()
         nupdates = total_timesteps//nbatch
         for update in range(1, nupdates+1):
             assert nbatch % nminibatches == 0
@@ -208,7 +210,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 savepath = osp.join(checkdir, '%.5i'%update)
                 print('Saving to', savepath)
                 model.save(savepath)
-        env.next_task()
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
 def safemean(xs):
