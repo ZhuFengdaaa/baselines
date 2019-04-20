@@ -218,14 +218,15 @@ def main(args):
 
     if args.play:
         logger.log("Running trained model")
-        obs = env.reset_task()
+        if hasattr(env.envs[0], "reset_task"):
+            env.reset_task()
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
         dones = np.zeros((1,))
 
         episode_rew = 0
-        max_episode = 20
+        max_episode = 5
         cnt_episode = 0
         while True:
             if state is not None:
