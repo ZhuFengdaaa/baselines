@@ -121,7 +121,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.perf_counter()
 
-    task_num = env.get_task_num()
+    task_num = env.task_num
     for i_task in range(task_num):
         if i_task > 0:
             env.next_task()
@@ -200,7 +200,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                     logger.dumpkvs()
             if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
-                task_name = env.get_task_name()
+                task_name = env.task_name
                 if save_path is not None:
                     checkdir = osp.join(save_path, task_name)
                 else:

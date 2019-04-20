@@ -10,7 +10,13 @@ def worker(remote, parent_remote, env_fn_wrapper):
     try:
         while True:
             cmd, data = remote.recv()
-            if cmd == 'step':
+            if cmd == 'get_task_name':
+                name = env.get_task_name()
+                remote.send((name))
+            elif cmd == 'get_task_num':
+                num = env.get_task_num()
+                remote.send((num))
+            elif cmd == 'step':
                 ob, reward, done, info = env.step(data)
                 if done:
                     ob = env.reset()
@@ -75,6 +81,48 @@ class SubprocVecEnv(VecEnv):
         self.waiting = False
         obs, rews, dones, infos = zip(*results)
         return _flatten_obs(obs), np.stack(rews), np.stack(dones), infos
+
+    @property
+    def task_num(self):
+        self.get_task_num_async()
+        return self.get_task_num_wait()
+
+    def get_task_num_async(self):
+        self._assert_not_closed()
+        self.remotes[0].send(("get_task_num", None))
+        self.waiting = True
+
+    def get_task_num_wait(self):
+        self._assert_not_closed()
+        results = self.remotes[0].recv()
+        self.waiting = False
+        return results
+
+    @property
+    def task_name(self):
+        self.get_task_name_async()
+        return self.get_task_name_wait()
+
+    def get_task_name_async(self):
+        self._assert_not_closed()
+        self.remotes[0].send(("get_task_name", None))
+        self.waiting = True
+
+    def get_task_name_wait(self):
+        self._assert_not_closed()
+        result = self.remotes[0].recv()
+        self.waiting = False
+        return results
+
+    def reset_task(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            remote.send(('reset_task', None))
+
+    def next_task(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            remote.send(('next_task', None))
 
     def reset(self):
         self._assert_not_closed()
