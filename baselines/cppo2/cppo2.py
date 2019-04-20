@@ -200,7 +200,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                     logger.dumpkvs()
             if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
-                task_name = env.task_name
+                task_name = env.max_task_name
                 if save_path is not None:
                     checkdir = osp.join(save_path, task_name)
                 else:

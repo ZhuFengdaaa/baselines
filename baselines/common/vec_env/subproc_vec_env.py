@@ -13,9 +13,14 @@ def worker(remote, parent_remote, env_fn_wrapper):
             if cmd == 'get_task_name':
                 name = env.get_task_name()
                 remote.send((name))
+            if cmd == 'get_max_task_name':
+                name = env.get_max_task_name()
+                remote.send((name))
             elif cmd == 'get_task_num':
                 num = env.get_task_num()
                 remote.send((num))
+            elif cmd == 'next_task':
+                num = env.next_task()
             elif cmd == 'step':
                 ob, reward, done, info = env.step(data)
                 if done:
@@ -79,7 +84,11 @@ class SubprocVecEnv(VecEnv):
         self._assert_not_closed()
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        obs, rews, dones, infos = zip(*results)
+        try:
+            obs, rews, dones, infos = zip(*results)
+        except:
+            print(results)
+            import pdb; pdb.set_trace()
         return _flatten_obs(obs), np.stack(rews), np.stack(dones), infos
 
     @property
@@ -99,6 +108,22 @@ class SubprocVecEnv(VecEnv):
         return results
 
     @property
+    def max_task_name(self):
+        self.get_max_task_name_async()
+        return self.get_max_task_name_wait()
+
+    def get_max_task_name_async(self):
+        self._assert_not_closed()
+        self.remotes[0].send(("get_max_task_name", None))
+        self.waiting = True
+
+    def get_max_task_name_wait(self):
+        self._assert_not_closed()
+        result = self.remotes[0].recv()
+        self.waiting = False
+        return result
+
+    @property
     def task_name(self):
         self.get_task_name_async()
         return self.get_task_name_wait()
@@ -112,7 +137,12 @@ class SubprocVecEnv(VecEnv):
         self._assert_not_closed()
         result = self.remotes[0].recv()
         self.waiting = False
-        return results
+        return result
+
+    def next_task(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            remote.send(("next_task", None))
 
     def reset_task(self):
         self._assert_not_closed()
