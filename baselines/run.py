@@ -226,7 +226,7 @@ def main(args):
         dones = np.zeros((1,))
 
         episode_rew = 0
-        max_episode = 5
+        max_episode = 10
         cnt_episode = 0
         while True:
             if state is not None:
