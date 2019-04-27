@@ -64,10 +64,14 @@ class DummyVecEnv(VecEnv):
         return task_num
 
     @property
-    def task_name(self):
-        task_name = self.envs[0].maze_dataset.get_curr_maze()[0]
+    def shorten_dist(self):
+        return self.envs[0].shorten_dist
+
+    @property
+    def max_task_name(self):
+        task_name = self.envs[0].maze_dataset.get_maze()[0]
         for e in self.envs:
-            if task_name != e.maze_dataset.get_curr_maze()[0]:
+            if task_name != e.maze_dataset.get_maze()[0]:
                 assert(False)
         return task_name
 
@@ -76,8 +80,10 @@ class DummyVecEnv(VecEnv):
             self.envs[e].reset_task()
 
     def next_task(self):
+        state = True
         for e in range(self.num_envs):
-            self.envs[e].next_task()
+            state = state and self.envs[e].next_task()
+        return state
 
     def reset(self):
         for e in range(self.num_envs):

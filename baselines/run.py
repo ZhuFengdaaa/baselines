@@ -226,8 +226,9 @@ def main(args):
         dones = np.zeros((1,))
 
         episode_rew = 0
-        max_episode = 10
+        max_episode = 50
         cnt_episode = 0
+        nsd_dic = {}
         while True:
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones)
@@ -236,18 +237,35 @@ def main(args):
 
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0] if isinstance(env, VecEnv) else rew
-            env.render()
+            if args.render:
+                env.render()
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
-                print('episode_rew={}'.format(episode_rew))
+                # print('episode_rew={}'.format(episode_rew))
+                shorten_dist = env.shorten_dist
+                print('# {}: dist={}'.format(cnt_episode, shorten_dist))
                 cnt_episode += 1
-                print(cnt_episode)
-                episode_rew = 0
-                obs = env.reset()
+                if env.max_task_name not in nsd_dic.keys():
+                    nsd_dic[env.max_task_name] = []
+                else:
+                    nsd_dic[env.max_task_name].append(shorten_dist)
                 if cnt_episode > max_episode:
                     cnt_episode = 0
                     if hasattr(env, "next_task"):
-                        env.next_task()
+                        if env.next_task() is False:
+                            break
+                obs = env.reset()
+        print(nsd_dic)
+        task_nsd = []
+        for k,v in nsd_dic.items():
+            assert(type(v) == list)
+            nsd = sum(v)/len(v)
+            task_nsd.append(nsd)
+            print("{}: {}".format(k, nsd))
+        nsd = sum(task_nsd)/len(task_nsd)
+        print("total nsd: {}".format(nsd))
+
+
 
     env.close()
 
