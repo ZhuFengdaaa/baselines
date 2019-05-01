@@ -15,7 +15,8 @@ def mujoco():
 def maze():
     return dict(
         nsteps=2048,
-        nminibatches=32,
+        # nminibatches=32,
+        nminibatches=1,
         lam=0.95,
         gamma=0.99,
         noptepochs=10,

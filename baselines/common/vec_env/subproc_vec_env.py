@@ -13,7 +13,10 @@ def worker(remote, parent_remote, env_fn_wrapper):
             if cmd == 'get_task_name':
                 name = env.get_task_name()
                 remote.send((name))
-            if cmd == 'get_max_task_name':
+            elif cmd == 'get_task_enc':
+                name = env.get_current_enc()
+                remote.send((name))
+            elif cmd == 'get_max_task_name':
                 name = env.get_max_task_name()
                 remote.send((name))
             elif cmd == 'get_task_num':
@@ -122,6 +125,24 @@ class SubprocVecEnv(VecEnv):
         result = self.remotes[0].recv()
         self.waiting = False
         return result
+
+    @property
+    def task_enc(self):
+        self.get_task_enc_async()
+        return self.get_task_enc_wait()
+
+    def get_task_enc_async(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+           remote.send(("get_task_enc", None)) 
+        self.waiting = True
+    
+    def get_task_enc_wait(self):
+        self._assert_not_closed()
+        results = np.asarray([remote.recv() for remote in self.remotes])
+        self.waiting = False
+        return results
+
 
     @property
     def task_name(self):

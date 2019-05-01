@@ -3,6 +3,7 @@ import functools
 
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
+from .decoder import Decoder
 
 try:
     from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
@@ -24,8 +25,8 @@ class Model(object):
     save/load():
     - Save load the model
     """
-    def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
-                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None):
+    def __init__(self, *, policy, ob_space, ac_space, enc_space, nbatch_act, nbatch_train,
+                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, nenv=1):
         self.sess = sess = get_session()
 
         with tf.variable_scope('cppo2_model', reuse=tf.AUTO_REUSE):
@@ -38,6 +39,14 @@ class Model(object):
                 train_model = policy(nbatch_train, nsteps, sess)
             else:
                 train_model = policy(microbatch_size, nsteps, sess)
+
+        with tf.variable_scope('dec_model', reuse=tf.AUTO_REUSE):
+            self.act_dec = Decoder(nbatch_act, 1, sess, ob_space, enc_space)
+            if microbatch_size is None:
+                self.train_dec = Decoder(nbatch_train, nsteps, sess, ob_space, enc_space)
+            else:
+                self.train_dec = Decoder(microbatch_size, nsteps, sess, ob_space, enc_space)
+
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])
@@ -86,10 +95,12 @@ class Model(object):
 
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(self.train_dec.h1, self.train_dec.dec_Z)
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
         params = tf.trainable_variables('cppo2_model')
+        dec_params = tf.trainable_variables('dec_model')
         # 2. Build our trainer
         if MPI is not None:
             self.trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=LR, epsilon=1e-5)
@@ -97,27 +108,34 @@ class Model(object):
             self.trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
         # 3. Calculate the gradients
         grads_and_var = self.trainer.compute_gradients(loss, params)
+        dec_grads_and_var = self.trainer.compute_gradients(dec_loss, dec_params)
+
         grads, var = zip(*grads_and_var)
+        dec_grads, dec_var = zip(*grads_and_var)
 
         if max_grad_norm is not None:
             # Clip the gradients (normalize)
             grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+            dec_grads, _grad_norm = tf.clip_by_global_norm(dec_grads, max_grad_norm)
         grads_and_var = list(zip(grads, var))
+        dec_grads_and_var = list(zip(dec_grads, dec_var))
         # zip aggregate each gradient with parameters associated
         # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
 
         self.grads = grads
         self.var = var
         self._train_op = self.trainer.apply_gradients(grads_and_var)
+        self.dec_train_op = self.trainer.apply_gradients(dec_grads_and_var)
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
 
 
         self.train_model = train_model
         self.act_model = act_model
-        self.step = act_model.step
+        # self.step = act_model.step
         self.value = act_model.value
         self.initial_state = act_model.initial_state
+        self.dec_initial_state = self.act_dec.initial_state
 
         self.save = functools.partial(save_variables, sess=sess)
         self.load = functools.partial(load_variables, sess=sess)
@@ -127,7 +145,13 @@ class Model(object):
         if MPI is not None:
             sync_from_root(sess, global_variables) #pylint: disable=E1101
 
-    def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
+    def step(self, observation, **extra_feed):
+        actions, values, states, neglogpacs = self.act_model.step(observation, **extra_feed)
+        dec_r, dec_states = self.act_dec.step(observation, **extra_feed)
+        dec_loss = self.train_dec.train(observation, **extra_feed)
+        return actions, values, states, neglogpacs, dec_r, dec_states
+
+    def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None, dec_S=None, dec_M=None, dec_Z=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # Returns = R + yV(s')
         advs = returns - values
@@ -149,8 +173,13 @@ class Model(object):
             td_map[self.train_model.S] = states
             td_map[self.train_model.M] = masks
 
-        return self.sess.run(
+        policy_loss = self.sess.run(
             self.stats_list + [self._train_op],
             td_map
         )[:-1]
 
+        dec_map = {
+            self.train_dec.X : obs,
+            self.train_dec.dec_Z : 
+
+        return policy_loss

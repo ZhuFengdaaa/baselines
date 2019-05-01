@@ -56,6 +56,13 @@ class DummyVecEnv(VecEnv):
                 self.buf_infos.copy())
 
     @property
+    def task_enc(self):
+        encs = []
+        for e in self.envs:
+            encs.append(e.get_current_enc())
+        return np.asarray(encs)
+
+    @property
     def task_num(self):
         task_num = self.envs[0].maze_dataset.task_num
         for e in self.envs:
