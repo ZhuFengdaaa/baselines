@@ -24,11 +24,11 @@ class Memory():
     def retrieve_memory(self, idx=None, _pos=None):
         if idx is None:
             idx = random.randint(0, len(self.m)-1)
-        if self.clip_size is None or self.clip_size>=self.m[idx][0].shape[1]:
+        if self.clip_size is None or self.clip_size>=self.m[idx][0].shape[0]:
             return self.m[idx]
         else:
             episode = self.m[idx]
-            l = episode[0].shape[1]
+            l = episode[0].shape[0]
             if _pos is None:
                 _pos = random.randint(0, l-1-self.clip_size)
             return (episode[0][_pos:_pos+self.clip_size,:], episode[1])
