@@ -43,10 +43,18 @@ class Memory():
             self.add_memory(episode)
 
     def get(self):
-        batch_episode=[]
-        batch_dec_Z=[]
+        batch_episode=None
+        batch_dec_Z=None
         for i in range(self.batch_size):
             episode, dec_Z = self.retrieve_memory()
-            batch_episode.append(episode)
-            batch_dec_Z.append(dec_Z)
-        return np.asarray(batch_episode), np.asarray(batch_dec_Z)
+            episode = np.expand_dims(episode, 0)
+            dec_Z = np.expand_dims(dec_Z, 0)
+            if batch_episode is None:
+                batch_episode = episode
+            else:
+                batch_episode = np.concatenate((batch_episode, episode), axis=0)
+            if batch_dec_Z is None:
+                batch_dec_Z = dec_Z
+            else:
+                batch_dec_Z = np.concatenate((batch_dec_Z, dec_Z), axis=0)
+        return batch_episode, batch_dec_Z
