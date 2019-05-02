@@ -229,11 +229,16 @@ def main(args):
         max_episode = 50
         cnt_episode = 0
         nsd_dic = {}
+        dec_states = None
+        enc = env.task_enc
         while True:
+            if dec_states is None:
+                dec_states = model.dec_initial_state
             if state is not None:
-                actions, _, state, _ = model.step(obs,S=state, M=dones)
+                actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
             else:
-                actions, _, _, _ = model.step(obs)
+                actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0] if isinstance(env, VecEnv) else rew
@@ -241,6 +246,7 @@ def main(args):
                 env.render()
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
+                dec_states = None
                 # print('episode_rew={}'.format(episode_rew))
                 shorten_dist = env.shorten_dist
                 print('# {}: dist={}'.format(cnt_episode, shorten_dist))
