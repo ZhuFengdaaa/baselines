@@ -10,13 +10,14 @@ class Runner(AbstractEnvRunner):
     run():
     - Make a mini batch
     """
-    def __init__(self, *, env, model, nsteps, gamma, lam):
+    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=3.3):
         super().__init__(env=env, model=model, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
         # Discount rate
         self.gamma = gamma
         self.dec_states = model.dec_initial_state
+        self.dec_r_coef = dec_r_coef
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
@@ -25,7 +26,7 @@ class Runner(AbstractEnvRunner):
         mb_states = self.states
         epinfos = []
         # For n in range number of steps
-        self.dec_states = model.dec_initial_state
+        self.dec_states = self.model.dec_initial_state
         for _ in range(self.nsteps):
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
@@ -39,8 +40,8 @@ class Runner(AbstractEnvRunner):
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], _rewards, self.dones, infos = self.env.step(actions)
-            rewards = _rewards + dec_r
-            print(_rewards, dec_r, rewards)
+            rewards = _rewards + dec_r * self.dec_r_coef
+            # print(_rewards, dec_r * self.dec_r_coef, rewards)
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)

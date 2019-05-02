@@ -1,9 +1,11 @@
 import tensorflow as tf
 import functools
+import numpy as np
 
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
 from .decoder import Decoder
+from .memory import Memory
 
 try:
     from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
@@ -26,8 +28,9 @@ class Model(object):
     - Save load the model
     """
     def __init__(self, *, policy, ob_space, ac_space, enc_space, nbatch_act, nbatch_train,
-                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, nenv=1):
+                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, nenv=1, nsteps_dec=100, dec_batch_size=3200):
         self.sess = sess = get_session()
+        self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv)
 
         with tf.variable_scope('cppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
@@ -41,12 +44,9 @@ class Model(object):
                 train_model = policy(microbatch_size, nsteps, sess)
 
         with tf.variable_scope('dec_model', reuse=tf.AUTO_REUSE):
+            nbatch_train_dec = nenv * nsteps_dec
             self.act_dec = Decoder(nbatch_act, 1, sess, ob_space, enc_space)
-            if microbatch_size is None:
-                self.train_dec = Decoder(nbatch_train, nsteps, sess, ob_space, enc_space)
-            else:
-                self.train_dec = Decoder(microbatch_size, nsteps, sess, ob_space, enc_space)
-
+            self.train_dec = Decoder(dec_batch_size, nsteps_dec, sess, ob_space, enc_space)
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])
@@ -95,7 +95,8 @@ class Model(object):
 
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
-        dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(self.train_dec.h1, self.train_dec.dec_Z)
+        _dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(self.train_dec.h1, self.train_dec.dec_Z)
+        dec_loss = tf.reduce_mean(_dec_loss)
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
@@ -148,7 +149,6 @@ class Model(object):
     def step(self, observation, **extra_feed):
         actions, values, states, neglogpacs = self.act_model.step(observation, **extra_feed)
         dec_r, dec_states = self.act_dec.step(observation, **extra_feed)
-        dec_loss = self.train_dec.train(observation, **extra_feed)
         return actions, values, states, neglogpacs, dec_r, dec_states
 
     def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None, dec_S=None, dec_M=None, dec_Z=None):
@@ -178,8 +178,17 @@ class Model(object):
             td_map
         )[:-1]
 
+        self.dec_m.set((obs, dec_Z))
+        batch_episode, batch_dec_Z =self.dec_m.get()
+        batch_dec_Z = np.expand_dims(batch_dec_Z, axis=1)
+        batch_dec_Z = np.repeat(batch_dec_Z, batch_episode.shape[1],axis=1)
+        batch_episode = batch_episode.reshape(-1, batch_episode.shape[2])
+        batch_dec_Z = batch_dec_Z.reshape(-1, batch_dec_Z.shape[2])
+        assert batch_episode.shape[0] == batch_dec_Z.shape[0]
+
         dec_map = {
-            self.train_dec.X : obs,
-            self.train_dec.dec_Z : 
+            self.train_dec.X : batch_episode,
+            self.train_dec.dec_Z : batch_dec_Z
+        }
 
         return policy_loss
