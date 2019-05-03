@@ -217,6 +217,8 @@ def main(args):
         model.save(save_path)
 
     if args.play:
+        if args.maze_sample != True:
+            env.set_maze_sample(False)
         logger.log("Running trained model")
         if hasattr(env.envs[0], "reset_task"):
             env.reset_task()

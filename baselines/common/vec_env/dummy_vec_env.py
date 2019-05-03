@@ -74,6 +74,10 @@ class DummyVecEnv(VecEnv):
     def shorten_dist(self):
         return self.envs[0].shorten_dist
 
+    def set_maze_sample(self, maze_sample):
+        for e in self.envs:
+            e.maze_dataset.sample = maze_sample
+
     @property
     def max_task_name(self):
         task_name = self.envs[0].maze_dataset.get_maze()[0]
