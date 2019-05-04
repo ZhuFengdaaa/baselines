@@ -28,9 +28,9 @@ class Model(object):
     - Save load the model
     """
     def __init__(self, *, policy, ob_space, ac_space, enc_space, nbatch_act, nbatch_train,
-                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, nenv=1, nsteps_dec=100, dec_batch_size=3200):
+            nsteps, ent_coef, vf_coef, sf_coef, max_grad_norm, microbatch_size=None, nenv=1, nsteps_dec=100, dec_batch_size=3200):
         self.sess = sess = get_session()
-        self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv)
+        self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv, batch_size=dec_batch_size//nsteps_dec)
 
         with tf.variable_scope('cppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
@@ -52,6 +52,7 @@ class Model(object):
         self.A = A = train_model.pdtype.sample_placeholder([None])
         self.ADV = ADV = tf.placeholder(tf.float32, [None])
         self.R = R = tf.placeholder(tf.float32, [None])
+        self.S = S = tf.placeholder(tf.float32, [None, ob_space.shape[0]])
         # Keep track of old actor
         self.OLDNEGLOGPAC = OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
         # Keep track of old critic
@@ -72,11 +73,15 @@ class Model(object):
         # Clip the value to reduce variability during Critic training
         # Get the predicted value
         vpred = train_model.vf
+        _spred = train_model.sf
         vpredclipped = OLDVPRED + tf.clip_by_value(train_model.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
         # Unclipped value
         vf_losses1 = tf.square(vpred - R)
         # Clipped value
         vf_losses2 = tf.square(vpredclipped - R)
+        spred = _spred[:-1]
+        sf_losses = tf.abs(spred - S)
+        sf_loss = tf.reduce_mean(sf_losses)
 
         vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
@@ -94,9 +99,10 @@ class Model(object):
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
-        _dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(self.train_dec.h1, self.train_dec.dec_Z)
-        dec_loss = tf.reduce_mean(_dec_loss)
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + sf_loss * sf_coef
+        _dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.train_dec.dec_Z, logits=self.train_dec.h1)
+        _dec_losses2 = tf.clip_by_value(_dec_loss,-1., 1.)
+        dec_loss = tf.reduce_mean(_dec_losses2)
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
@@ -112,12 +118,12 @@ class Model(object):
         dec_grads_and_var = self.trainer.compute_gradients(dec_loss, dec_params)
 
         grads, var = zip(*grads_and_var)
-        dec_grads, dec_var = zip(*grads_and_var)
+        dec_grads, dec_var = zip(*dec_grads_and_var)
 
         if max_grad_norm is not None:
             # Clip the gradients (normalize)
-            grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
-            dec_grads, _grad_norm = tf.clip_by_global_norm(dec_grads, max_grad_norm)
+            grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+            dec_grads, dec_grad_norm = tf.clip_by_global_norm(dec_grads, max_grad_norm)
         grads_and_var = list(zip(grads, var))
         dec_grads_and_var = list(zip(dec_grads, dec_var))
         # zip aggregate each gradient with parameters associated
@@ -127,8 +133,11 @@ class Model(object):
         self.var = var
         self._train_op = self.trainer.apply_gradients(grads_and_var)
         self.dec_train_op = self.trainer.apply_gradients(dec_grads_and_var)
-        self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
-        self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
+        self.loss_names = ['policy_loss', 'value_loss', 'state_loss'
+                , 'policy_entropy', 'approxkl', 'clipfrac', "dec_loss"]
+        self.stats_list = [pg_loss, vf_loss, sf_loss 
+                , entropy, approxkl, clipfrac]
+        self.dec_stats_list = [dec_loss]
 
 
         self.train_model = train_model
@@ -151,7 +160,7 @@ class Model(object):
         dec_r, dec_states = self.act_dec.step(observation, **extra_feed)
         return actions, values, states, neglogpacs, dec_r, dec_states
 
-    def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None, dec_S=None, dec_M=None, dec_Z=None):
+    def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None, dec_Z=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # Returns = R + yV(s')
         advs = returns - values
@@ -167,7 +176,8 @@ class Model(object):
             self.LR : lr,
             self.CLIPRANGE : cliprange,
             self.OLDNEGLOGPAC : neglogpacs,
-            self.OLDVPRED : values
+            self.OLDVPRED : values,
+            self.S : obs1[:-1]
         }
         if states is not None:
             td_map[self.train_model.S] = states
@@ -178,17 +188,35 @@ class Model(object):
             td_map
         )[:-1]
 
-        self.dec_m.set((obs, dec_Z))
-        batch_episode, batch_dec_Z =self.dec_m.get()
-        batch_dec_Z = np.expand_dims(batch_dec_Z, axis=1)
-        batch_dec_Z = np.repeat(batch_dec_Z, batch_episode.shape[1],axis=1)
-        batch_episode = batch_episode.reshape(-1, batch_episode.shape[2])
-        batch_dec_Z = batch_dec_Z.reshape(-1, batch_dec_Z.shape[2])
-        assert batch_episode.shape[0] == batch_dec_Z.shape[0]
+        self.dec_m.set((obs, dec_Z, masks))
+        batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
+        dec_S = self.train_dec.initial_state
 
         dec_map = {
             self.train_dec.X : batch_episode,
-            self.train_dec.dec_Z : batch_dec_Z
+            self.train_dec.dec_Z : batch_dec_Z,
+            self.train_dec.dec_S : dec_S,
+            self.train_dec.dec_M : batch_dec_M
         }
+        dec_loss = self.sess.run(
+            self.dec_stats_list,
+            dec_map
+        )
+        policy_loss = policy_loss + dec_loss
 
         return policy_loss
+    
+    def dec_train(self, dec_lr):
+        batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
+        dec_S = self.train_dec.initial_state
+        dec_map = {
+            self.train_dec.X : batch_episode,
+            self.train_dec.dec_Z : batch_dec_Z,
+            self.train_dec.dec_S : dec_S,
+            self.train_dec.dec_M : batch_dec_M,
+            self.LR : dec_lr
+        }
+        dec_loss = self.sess.run(
+            self.dec_stats_list + [self.dec_train_op],
+            dec_map
+        )[:-1]

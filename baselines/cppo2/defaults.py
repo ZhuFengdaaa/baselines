@@ -24,7 +24,8 @@ def maze():
         ent_coef=0.0,
         lr=lambda f: 3e-4 * f,
         cliprange=0.2,
-        value_network='copy'
+        value_network='copy',
+        estimate_s=True
     )
 
 

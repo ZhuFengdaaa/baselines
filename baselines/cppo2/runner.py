@@ -23,6 +23,7 @@ class Runner(AbstractEnvRunner):
         # Here, we init the lists that will contain the mb of experiences
         enc = self.env.task_enc
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
+        mb_obs1, mb_rewards1, mb_rewards2 = [], [], []
         mb_states = self.states
         epinfos = []
         # For n in range number of steps
@@ -40,14 +41,20 @@ class Runner(AbstractEnvRunner):
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], _rewards, self.dones, infos = self.env.step(actions)
+            mb_obs1.append(self.obs.copy())
             rewards = _rewards + dec_r * self.dec_r_coef
+            mb_rewards1.append(_rewards)
+            mb_rewards2.append(dec_r * self.dec_r_coef)
+            mb_rewards.append(rewards)
             # print(_rewards, dec_r * self.dec_r_coef, rewards)
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
-            mb_rewards.append(rewards)
         #batch of steps to batch of rollouts
+        r1 = np.mean(mb_rewards1)
+        r2 = np.mean(mb_rewards2)
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
+        mb_obs1 = np.asarray(mb_obs1, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
         mb_actions = np.asarray(mb_actions)
         mb_values = np.asarray(mb_values, dtype=np.float32)
@@ -69,8 +76,8 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
-            mb_states, epinfos, enc)
+        return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
+            mb_states, epinfos, enc, r1, r2)
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """

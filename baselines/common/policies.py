@@ -15,7 +15,7 @@ class PolicyWithValue(object):
     Encapsulates fields and methods for RL policy and value function estimation with shared parameters
     """
 
-    def __init__(self, env, observations, latent, estimate_q=False, vf_latent=None, sess=None, **tensors):
+    def __init__(self, env, observations, latent, estimate_q=False, estimate_s=False, vf_latent=None, sess=None, **tensors):
         """
         Parameters:
         ----------
@@ -62,6 +62,10 @@ class PolicyWithValue(object):
         else:
             self.vf = fc(vf_latent, 'vf', 1)
             self.vf = self.vf[:,0]
+            
+        if estimate_s:
+            self.sf = fc(vf_latent, 'sf', env.observation_space.shape[0])
+            print(self.sf)
 
     def _evaluate(self, variables, observation, **extra_feed):
         sess = self.sess
@@ -118,7 +122,7 @@ class PolicyWithValue(object):
     def load(self, load_path):
         tf_util.load_state(load_path, sess=self.sess)
 
-def build_policy(env, policy_network, value_network=None,  normalize_observations=False, estimate_q=False, **policy_kwargs):
+def build_policy(env, policy_network, value_network=None,  normalize_observations=False, estimate_q=False, estimate_s=False, **policy_kwargs):
     if isinstance(policy_network, str):
         network_type = policy_network
         policy_network = get_network_builder(network_type)(**policy_kwargs)
@@ -172,6 +176,7 @@ def build_policy(env, policy_network, value_network=None,  normalize_observation
             vf_latent=vf_latent,
             sess=sess,
             estimate_q=estimate_q,
+            estimate_s=estimate_s,
             **extra_tensors
         )
         return policy

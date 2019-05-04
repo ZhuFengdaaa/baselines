@@ -19,7 +19,8 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-            vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
+            dec_lr=1e-3,
+            vf_coef=0.5, sf_coef=1, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
             save_interval=0, load_path=None, model_fn=None, **network_kwargs):
     '''
@@ -85,6 +86,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else: assert callable(cliprange)
     total_timesteps = int(total_timesteps)
 
+    print(network, network_kwargs)
     policy = build_policy(env, network, **network_kwargs)
 
     # Get the nb of env
@@ -107,7 +109,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         model_fn = Model
 
     enc_space = env.task_num
-    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs, nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm, nenv=nenvs)
+    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs, nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef, max_grad_norm=max_grad_norm, nenv=nenvs)
 
     if load_path is not None:
         model.load(load_path)
@@ -138,7 +140,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             # Calculate the cliprange
             cliprangenow = cliprange(frac)
             # Get minibatch
-            obs, returns, masks, actions, values, neglogpacs, states, epinfos, enc = runner.run() #pylint: disable=E0632
+            obs, obs1, returns, masks, actions, values, neglogpacs, states, epinfos, enc, r1, r2 = runner.run() #pylint: disable=E0632
             if eval_env is not None:
                 eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos, enc = eval_runner.run() #pylint: disable=E0632
 
@@ -151,16 +153,20 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             if states is None: # nonrecurrent version
                 # Index of each element of batch_size
                 # Create the indices array
-                inds = np.arange(nbatch)
+                # follow recurrent style for S and dec
+                assert nenvs % nminibatches == 0
+                envsperbatch = nenvs // nminibatches
+                envinds = np.arange(nenvs)
+                flatinds = np.arange(nenvs * nsteps).reshape(nenvs, nsteps)
                 for _ in range(noptepochs):
-                    # Randomize the indexes
-                    np.random.shuffle(inds)
-                    # 0 to batch_size with batch_train_size step
-                    for start in range(0, nbatch, nbatch_train):
-                        end = start + nbatch_train
-                        mbinds = inds[start:end]
-                        slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
+                    np.random.shuffle(envinds)
+                    for start in range(0, nenvs, envsperbatch):
+                        end = start + envsperbatch
+                        mbenvinds = envinds[start:end]
+                        mbflatinds = flatinds[mbenvinds].ravel()
+                        slices = (arr[mbflatinds] for arr in (obs, obs1, returns, masks, actions, values, neglogpacs))
                         mblossvals.append(model.train(lrnow, cliprangenow, *slices, dec_Z=enc))
+                    model.dec_train(dec_lr)
             else: # recurrent version
                 assert nenvs % nminibatches == 0
                 envsperbatch = nenvs // nminibatches
@@ -186,6 +192,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 # Calculates if value function is a good predicator of the returns (ev > 1)
                 # or if it's just worse than predicting nothing (ev =< 0)
                 ev = explained_variance(values, returns)
+                logger.logkv("reward_RL", r1)
+                logger.logkv("reward_dec", r2)
                 logger.logkv("serial_timesteps", update*nsteps)
                 logger.logkv("nupdates", update)
                 logger.logkv("total_timesteps", update*nbatch)

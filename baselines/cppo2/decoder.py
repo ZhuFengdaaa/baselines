@@ -2,17 +2,16 @@ import tensorflow as tf
 from baselines.a2c import utils
 import numpy as np
 from baselines.a2c.utils import conv, fc, conv_to_fc, batch_to_seq, seq_to_batch
-from baselines.common.input import observation_placeholder, encode_observation
 from baselines.common.tf_util import adjust_shape
 
 
 class Decoder():
     def __init__(self, nbatch, nsteps, sess, ob_space, enc_space, X=None, nlstm=128, layer_norm=False):
         self.sess = sess or tf.get_default_session()
-        self.X = X if X is not None else observation_placeholder(ob_space, batch_size=nbatch)
         self.dec_Z = tf.placeholder(tf.float32, [nbatch, enc_space])
         # _h = tf.concat([self.X, self.dec_Z], 1)
         nenv = nbatch // nsteps
+        self.X = tf.placeholder(tf.float32, [nbatch, ob_space.shape[0]]) #mask (done t-1)
         h = tf.layers.flatten(self.X)
         self.dec_M = tf.placeholder(tf.float32, [nbatch]) #mask (done t-1)
         self.dec_S = tf.placeholder(tf.float32, [nenv, 2*nlstm]) # states
