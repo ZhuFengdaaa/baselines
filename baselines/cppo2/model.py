@@ -101,7 +101,8 @@ class Model(object):
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + sf_loss * sf_coef
         _dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.train_dec.dec_Z, logits=self.train_dec.h1)
-        _dec_losses2 = tf.clip_by_value(_dec_loss,-1., 1.)
+        self.pt = tf.print(_dec_loss)
+        _dec_losses2 = tf.clip_by_value(_dec_loss,-10., 10.)
         dec_loss = tf.reduce_mean(_dec_losses2)
 
         # UPDATE THE PARAMETERS USING LOSS
@@ -203,7 +204,7 @@ class Model(object):
             self.LR : dec_lr
         }
         dec_loss = self.sess.run(
-            self.dec_stats_list + [self.dec_train_op],
+            self.dec_stats_list + [self.dec_train_op] + [self.pt],
             dec_map
-        )[:-1]
+        )[:-2]
         return dec_loss

@@ -123,7 +123,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     tfirststart = time.perf_counter()
 
     task_num = env.task_num
-    for i_task in range(task_num):
+    env.next_task()
+    for i_task in range(task_num-1):
         if i_task > 0:
             env.next_task()
         nupdates = total_timesteps//nbatch
