@@ -28,7 +28,7 @@ class Runner(AbstractEnvRunner):
         epinfos = []
         # For n in range number of steps
         self.dec_states = self.model.dec_initial_state
-        for _ in range(self.nsteps):
+        for _ in range(self.nsteps+1):
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
             actions, values, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
@@ -76,6 +76,13 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
+        mb_obs = mb_obs[:-1, :, :]
+        mb_returns = mb_returns[:-1, :]
+        mb_dones = mb_dones[:-1, :]
+        mb_actions = mb_actions[:-1, :, :]
+        mb_values = mb_values[:-1, :]
+        mb_neglogpacs = mb_neglogpacs[:-1, :]
+        mb_obs1 = mb_obs1[:-1, :, :]
         return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
             mb_states, epinfos, enc, r1, r2)
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()

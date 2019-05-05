@@ -134,7 +134,8 @@ class Model(object):
         self._train_op = self.trainer.apply_gradients(grads_and_var)
         self.dec_train_op = self.trainer.apply_gradients(dec_grads_and_var)
         self.loss_names = ['policy_loss', 'value_loss', 'state_loss'
-                , 'policy_entropy', 'approxkl', 'clipfrac', "dec_loss"]
+                , 'policy_entropy', 'approxkl', 'clipfrac']
+        self.dec_loss_names = ['dec_loss']
         self.stats_list = [pg_loss, vf_loss, sf_loss 
                 , entropy, approxkl, clipfrac]
         self.dec_stats_list = [dec_loss]
@@ -160,7 +161,7 @@ class Model(object):
         dec_r, dec_states = self.act_dec.step(observation, **extra_feed)
         return actions, values, states, neglogpacs, dec_r, dec_states
 
-    def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None, dec_Z=None):
+    def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # Returns = R + yV(s')
         advs = returns - values
@@ -188,25 +189,10 @@ class Model(object):
             td_map
         )[:-1]
 
-        self.dec_m.set((obs, dec_Z, masks))
-        batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
-        dec_S = self.train_dec.initial_state
-
-        dec_map = {
-            self.train_dec.X : batch_episode,
-            self.train_dec.dec_Z : batch_dec_Z,
-            self.train_dec.dec_S : dec_S,
-            self.train_dec.dec_M : batch_dec_M
-        }
-        dec_loss = self.sess.run(
-            self.dec_stats_list,
-            dec_map
-        )
-        policy_loss = policy_loss + dec_loss
-
         return policy_loss
     
-    def dec_train(self, dec_lr):
+    def dec_train(self, dec_lr, obs, masks, dec_Z):
+        self.dec_m.set((obs, dec_Z, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
         dec_S = self.train_dec.initial_state
         dec_map = {
@@ -220,3 +206,4 @@ class Model(object):
             self.dec_stats_list + [self.dec_train_op],
             dec_map
         )[:-1]
+        return dec_loss
