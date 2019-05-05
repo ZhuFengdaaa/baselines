@@ -20,7 +20,7 @@ def constfn(val):
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             dec_lr=1e-3,
-            vf_coef=0.5, sf_coef=1, max_grad_norm=0.5, gamma=0.99, lam=0.95,
+            vf_coef=0.5, sf_coef=0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
             save_interval=0, load_path=None, model_fn=None, **network_kwargs):
     '''
@@ -108,6 +108,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     enc_space = env.task_num
     model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs, nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef, max_grad_norm=max_grad_norm, nenv=nenvs)
 
+    env.next_task()
     if load_path is not None:
         model.load(load_path)
     # Instantiate the runner object
@@ -123,7 +124,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     tfirststart = time.perf_counter()
 
     task_num = env.task_num
-    env.next_task()
     for i_task in range(task_num-1):
         if i_task > 0:
             env.next_task()
@@ -138,7 +138,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             # Calculate the cliprange
             cliprangenow = cliprange(frac)
             # Get minibatch
-            obs, obs1, returns, masks, actions, values, neglogpacs, states, epinfos, enc, r1, r2 = runner.run() #pylint: disable=E0632
+            obs, obs1, returns, masks, actions, values, neglogpacs, encs, states, epinfos, r1, r2 = runner.run() #pylint: disable=E0632
             if eval_env is not None:
                 eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos, enc = eval_runner.run() #pylint: disable=E0632
 
@@ -170,8 +170,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         end = start + envsperbatch
                         mbenvinds = envinds[start:end]
                         mbflatinds = flatinds[mbenvinds].ravel()
-                        slices = (arr[mbflatinds] for arr in (obs, masks))
-                        dec_mblossvals.append(model.dec_train(dec_lr, *slices, dec_Z=enc))
+                        slices = (arr[mbflatinds] for arr in (obs, masks, encs))
+                        dec_mblossvals.append(model.dec_train(dec_lr, *slices))
             else: # recurrent version
                 assert nenvs % nminibatches == 0
                 envsperbatch = nenvs // nminibatches

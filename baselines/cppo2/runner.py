@@ -8,9 +8,8 @@ class Runner(AbstractEnvRunner):
     - Initialize the runner
 
     run():
-    - Make a mini batch
     """
-    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=3.3):
+    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=0.1):
         super().__init__(env=env, model=model, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
@@ -21,14 +20,15 @@ class Runner(AbstractEnvRunner):
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
-        enc = self.env.task_enc
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
         mb_obs1, mb_rewards1, mb_rewards2 = [], [], []
         mb_states = self.states
+        mb_encs = []
         epinfos = []
         # For n in range number of steps
         self.dec_states = self.model.dec_initial_state
-        for _ in range(self.nsteps+1):
+        for _ in range(self.nsteps):
+            enc = self.obs[:, -9:]
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
             actions, values, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
@@ -37,6 +37,7 @@ class Runner(AbstractEnvRunner):
             mb_values.append(values)
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
+            mb_encs.append(enc)
 
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
@@ -60,6 +61,7 @@ class Runner(AbstractEnvRunner):
         mb_values = np.asarray(mb_values, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
+        mb_encs = np.asarray(mb_encs)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
 
         # discount/bootstrap off value fn
@@ -76,15 +78,30 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        mb_obs = mb_obs[:-1, :, :]
-        mb_returns = mb_returns[:-1, :]
-        mb_dones = mb_dones[:-1, :]
-        mb_actions = mb_actions[:-1, :, :]
-        mb_values = mb_values[:-1, :]
-        mb_neglogpacs = mb_neglogpacs[:-1, :]
-        mb_obs1 = mb_obs1[:-1, :, :]
-        return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
-            mb_states, epinfos, enc, r1, r2)
+        check(mb_encs, mb_dones)
+        return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_encs)),
+            mb_states, epinfos, r1, r2)
+
+def check(encs, dones):
+    n, nenv, c = encs.shape
+    nd, nenvd = dones.shape
+    assert(n==nd and nenv==nenvd)
+    for i in range(n-1):
+        for j in range(nenv):
+            if dones[i,j] == False:
+                try:
+                    assert(np.array_equal(encs[i,j,:],encs[i+1,j,:])==True)
+                except:
+                    print(i, j, dones[i,j], encs[i,j,:], encs[i+1,j,:])
+                    import pdb; pdb.set_trace()
+            if np.array_equal(encs[i,j,:],encs[i+1,j,:])==False:
+                try:
+                    assert(dones[i,j] == True)
+                except:
+                    print(i, j, dones[i,j], encs[i,j,:], encs[i+1,j,:])
+                    import pdb; pdb.set_trace()
+
+
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """

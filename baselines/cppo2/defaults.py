@@ -14,7 +14,7 @@ def mujoco():
 
 def maze():
     return dict(
-        nsteps=2048,
+        nsteps=1024,
         # nminibatches=32,
         nminibatches=32,
         lam=0.95,
@@ -23,6 +23,7 @@ def maze():
         log_interval=1,
         ent_coef=0.0,
         lr=lambda f: 3e-4 * f,
+        dec_lr=1e-4,
         cliprange=0.2,
         value_network='copy',
         estimate_s=True

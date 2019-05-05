@@ -27,6 +27,7 @@ class Decoder():
         self.h1 = fc(h, 'fc1', nh=enc_space, init_scale=np.sqrt(2))
         logq = self.dec_Z * tf.math.log(tf.nn.softmax(self.h1))
         logp = self.dec_Z * tf.math.log(z_prob)
+        self.pt3 = tf.print(logp)
         self.r = tf.reduce_sum(logq-logp, 1)
         # eheck shape
         self.initial_state = np.zeros(self.dec_S.shape.as_list(), dtype=float)

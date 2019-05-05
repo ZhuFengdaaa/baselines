@@ -8,6 +8,8 @@ class Memory():
         self.size = size
         self.clip_size=clip_size
         self.nenv = nenv
+        self._n = 8.*1e6/8/2048*10*9
+        self._m = size
         if batch_size is None:
             self.batch_size=nenv
         else:
@@ -17,7 +19,7 @@ class Memory():
         if len(self.m) < self.size:
             self.m.append(episode)
         else:
-            if random.uniform(0, 1) > 0.5:
+            if random.uniform(0, 1) < self._m/self._n:
                 idx = random.randint(0, self.size-1)
                 self.m[idx] = episode
 
@@ -31,17 +33,18 @@ class Memory():
             l = obs.shape[0]
             if _pos is None:
                 _pos = random.randint(0, l-1-self.clip_size)
-            return (obs[_pos:_pos+self.clip_size,:], dec_Z, masks[_pos:_pos+self.clip_size])
+            return (obs[_pos:_pos+self.clip_size,:], dec_Z[_pos:_pos+self.clip_size, :], masks[_pos:_pos+self.clip_size])
 
     def set(self, episodes):
-        (obs, dec_Z, masks) = episodes
+        (obs, encs, masks) = episodes
         nsteps = obs.shape[0] // self.nenv
         nc = obs.shape[1]
         obs = np.reshape(obs, (self.nenv, nsteps, -1))
+        encs = np.reshape(encs, (self.nenv, nsteps, -1))
         masks = np.reshape(masks, (self.nenv, nsteps))
         assert obs.shape[2] == nc
         for i in range(self.nenv):
-            episode = (obs[i, :, :], dec_Z[i], masks[i,:])
+            episode = (obs[i, :, :], encs[i,:, :], masks[i,:])
             self.add_memory(episode)
 
     def get(self):
@@ -61,10 +64,8 @@ class Memory():
                 batch_episode = np.concatenate((batch_episode, episode), axis=0)
                 batch_dec_Z = np.concatenate((batch_dec_Z, dec_Z), axis=0)
                 batch_dec_M = np.concatenate((batch_dec_M, dec_M), axis=0)
-        batch_dec_Z = np.expand_dims(batch_dec_Z, axis=1)
-        batch_dec_Z = np.repeat(batch_dec_Z, batch_episode.shape[1],axis=1)
         batch_episode = batch_episode.reshape(-1, batch_episode.shape[2])
         batch_dec_Z = batch_dec_Z.reshape(-1, batch_dec_Z.shape[2])
         batch_dec_M = batch_dec_M.reshape(-1)
-        assert batch_episode.shape[0] == batch_dec_Z.shape[0]
+        assert batch_episode.shape[0] == batch_dec_Z.shape[0] == batch_dec_M.shape[0]
         return batch_episode, batch_dec_Z, batch_dec_M

@@ -52,6 +52,7 @@ class Model(object):
         self.A = A = train_model.pdtype.sample_placeholder([None])
         self.ADV = ADV = tf.placeholder(tf.float32, [None])
         self.R = R = tf.placeholder(tf.float32, [None])
+        self.M = M = tf.placeholder(tf.float32, [None])
         self.S = S = tf.placeholder(tf.float32, [None, ob_space.shape[0]])
         # Keep track of old actor
         self.OLDNEGLOGPAC = OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
@@ -73,14 +74,14 @@ class Model(object):
         # Clip the value to reduce variability during Critic training
         # Get the predicted value
         vpred = train_model.vf
-        _spred = train_model.sf
+        spred = train_model.sf
         vpredclipped = OLDVPRED + tf.clip_by_value(train_model.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
         # Unclipped value
         vf_losses1 = tf.square(vpred - R)
         # Clipped value
         vf_losses2 = tf.square(vpredclipped - R)
-        spred = _spred[:-1]
-        sf_losses = tf.abs(spred - S)
+        sf_losses = tf.reduce_mean(tf.abs(spred - S), axis=1) * (1-M)
+        print(S, spred, tf.abs(spred - S), M)
         sf_loss = tf.reduce_mean(sf_losses)
 
         vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
@@ -100,10 +101,9 @@ class Model(object):
 
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + sf_loss * sf_coef
-        _dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.train_dec.dec_Z, logits=self.train_dec.h1)
-        self.pt = tf.print(_dec_loss)
-        _dec_losses2 = tf.clip_by_value(_dec_loss,-10., 10.)
-        dec_loss = tf.reduce_mean(_dec_losses2)
+        self._dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.train_dec.dec_Z, logits=self.train_dec.h1)
+        self._dec_losses2 = tf.clip_by_value(self._dec_loss,-5. , 5.)
+        self.dec_loss = tf.reduce_mean(self._dec_losses2)
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
@@ -116,30 +116,33 @@ class Model(object):
             self.trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
         # 3. Calculate the gradients
         grads_and_var = self.trainer.compute_gradients(loss, params)
-        dec_grads_and_var = self.trainer.compute_gradients(dec_loss, dec_params)
+        self.dec_grads_and_var = self.trainer.compute_gradients(self.dec_loss, dec_params)
 
         grads, var = zip(*grads_and_var)
-        dec_grads, dec_var = zip(*dec_grads_and_var)
+        self.dec_grads, dec_var = zip(*self.dec_grads_and_var)
 
         if max_grad_norm is not None:
             # Clip the gradients (normalize)
             grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
-            dec_grads, dec_grad_norm = tf.clip_by_global_norm(dec_grads, max_grad_norm)
+            # self.dec_global_norm always inf, I dont know why
+            self.dec_global_norm = tf.linalg.global_norm(self.dec_grads)
+            self.pt = tf.print(self.dec_global_norm)
+            self.dec_grads2, dec_grad_norm = tf.clip_by_global_norm(self.dec_grads, 5)
         grads_and_var = list(zip(grads, var))
-        dec_grads_and_var = list(zip(dec_grads, dec_var))
+        self.dec_grads_and_var2 = list(zip(self.dec_grads2, dec_var))
         # zip aggregate each gradient with parameters associated
         # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
 
         self.grads = grads
         self.var = var
         self._train_op = self.trainer.apply_gradients(grads_and_var)
-        self.dec_train_op = self.trainer.apply_gradients(dec_grads_and_var)
+        self.dec_train_op = self.trainer.apply_gradients(self.dec_grads_and_var2)
         self.loss_names = ['policy_loss', 'value_loss', 'state_loss'
                 , 'policy_entropy', 'approxkl', 'clipfrac']
         self.dec_loss_names = ['dec_loss']
         self.stats_list = [pg_loss, vf_loss, sf_loss 
                 , entropy, approxkl, clipfrac]
-        self.dec_stats_list = [dec_loss]
+        self.dec_stats_list = [self.dec_loss]
 
 
         self.train_model = train_model
@@ -179,7 +182,8 @@ class Model(object):
             self.CLIPRANGE : cliprange,
             self.OLDNEGLOGPAC : neglogpacs,
             self.OLDVPRED : values,
-            self.S : obs1[:-1]
+            self.S : obs1,
+            self.M : masks
         }
         if states is not None:
             td_map[self.train_model.S] = states
@@ -192,8 +196,8 @@ class Model(object):
 
         return policy_loss
     
-    def dec_train(self, dec_lr, obs, masks, dec_Z):
-        self.dec_m.set((obs, dec_Z, masks))
+    def dec_train(self, dec_lr, obs, masks, decs):
+        self.dec_m.set((obs, decs, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
         dec_S = self.train_dec.initial_state
         dec_map = {
@@ -203,8 +207,15 @@ class Model(object):
             self.train_dec.dec_M : batch_dec_M,
             self.LR : dec_lr
         }
-        dec_loss = self.sess.run(
-            self.dec_stats_list + [self.dec_train_op] + [self.pt],
-            dec_map
-        )[:-2]
-        return dec_loss
+        dg, dgn = self.sess.run([self.dec_grads, self.dec_global_norm], dec_map)
+        try:
+            return self.sess.run(
+                self.dec_stats_list + [self.dec_train_op] + [],
+                dec_map
+            )[:-1]
+        except Exception as e:
+            print("if global norm inf or nan, pass", e)
+            pass
+            # print(e)
+            # import pdb; pdb.set_trace()
+        return [0]
