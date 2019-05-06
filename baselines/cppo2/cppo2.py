@@ -19,7 +19,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-            dec_lr=1e-3,
+            dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200,
             vf_coef=0.5, sf_coef=0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
             save_interval=0, load_path=None, model_fn=None, **network_kwargs):
@@ -106,15 +106,17 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         model_fn = Model
 
     enc_space = env.task_num
-    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs, nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef, max_grad_norm=max_grad_norm, nenv=nenvs)
+    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
+                     nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef,
+                     max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size)
 
     env.next_task()
     if load_path is not None:
         model.load(load_path)
     # Instantiate the runner object
-    runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
+    runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam, dec_r_coef=dec_r_coef)
     if eval_env is not None:
-        eval_runner = Runner(env = eval_env, model = model, nsteps = nsteps, gamma = gamma, lam= lam)
+        eval_runner = Runner(env=eval_env, model=model, nsteps=nsteps, gamma=gamma, lam=lam, dec_r_coef=dec_r_coef)
 
     epinfobuf = deque(maxlen=100)
     if eval_env is not None:
