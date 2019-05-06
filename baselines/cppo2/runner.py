@@ -9,7 +9,7 @@ class Runner(AbstractEnvRunner):
 
     run():
     """
-    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=0.1):
+    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=0.0):
         super().__init__(env=env, model=model, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
