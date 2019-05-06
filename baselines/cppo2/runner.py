@@ -78,7 +78,7 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        check(mb_encs, mb_dones)
+        # check(mb_encs, mb_dones) # check success
         return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_encs)),
             mb_states, epinfos, r1, r2)
 

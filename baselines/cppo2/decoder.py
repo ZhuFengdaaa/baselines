@@ -25,9 +25,10 @@ class Decoder():
             # h5, self.snew = utils.lstm(xs, ms, self.dec_S, scope='lstm', nh=nlstm)
         h = seq_to_batch(h5)
         self.h1 = fc(h, 'fc1', nh=enc_space, init_scale=np.sqrt(2))
-        logq = self.dec_Z * tf.math.log(tf.nn.softmax(self.h1))
+        # logq = self.dec_Z * tf.math.log(tf.nn.softmax(self.h1))
+        logq = - tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.dec_Z, logits=self.h1)
         logp = self.dec_Z * tf.math.log(z_prob)
-        self.r = tf.reduce_sum(logq, 1)
+        self.r = tf.reduce_mean(logq)
         # eheck shape
         self.initial_state = np.zeros(self.dec_S.shape.as_list(), dtype=float)
         # feed_dic = {'S':S, 'M':M, 'state':snew, 'initial_state':initial_state}
