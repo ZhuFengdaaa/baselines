@@ -28,7 +28,7 @@ class Runner(AbstractEnvRunner):
         # For n in range number of steps
         self.dec_states = self.model.dec_initial_state
         for _ in range(self.nsteps):
-            enc = self.obs[:, -9:]
+            enc = self.obs[:, -self.env.task_num:]
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
             actions, values, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
