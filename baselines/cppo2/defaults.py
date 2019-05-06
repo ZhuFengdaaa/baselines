@@ -1,3 +1,5 @@
+import os
+
 def mujoco():
     return dict(
         nsteps=2048,
@@ -13,21 +15,34 @@ def mujoco():
     )
 
 def maze():
-    return dict(
+    maze_dict = dict(
         nsteps=1024,
-        # nminibatches=32,
         nminibatches=32,
+        dec_lr=1e-3,
+        num_env=8,
+        num_timesteps=5e5,
+        sf_coef=0,
+        save_path='models/default',
+        nsteps_dec=100,
+        dec_batch_size=3200,
+        dec_r_coef=0,
         lam=0.95,
         gamma=0.99,
         noptepochs=10,
         log_interval=1,
         ent_coef=0.0,
         lr=lambda f: 3e-4 * f,
-        dec_lr=1e-3,
         cliprange=0.2,
         value_network='copy',
         estimate_s=True
     )
+    if not os.path.exists(maze_dict['save_path']):
+        os.makedirs(maze_dict['save_path'])
+    with open('{}/config.txt'.format(maze_dict['save_path']), 'w+') as f:
+        for key, value in maze_dict.items():
+            f.writelines('{} = {}\n'.format(key, value))
+
+    return maze_dict
 
 
 def atari():
