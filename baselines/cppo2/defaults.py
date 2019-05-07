@@ -19,7 +19,7 @@ def maze():
         nsteps=1024,
         nminibatches=32,
         dec_lr=0,
-        num_env=8,
+        # num_env=8,
         num_timesteps=5e5,
         sf_coef=0,
         save_path='models/default',

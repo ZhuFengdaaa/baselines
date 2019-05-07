@@ -19,7 +19,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-            dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200, num_env=8, num_timesteps=500000,
+            dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200, num_timesteps=500000,
             vf_coef=0.5, sf_coef=0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
             save_interval=0, load_path=None, model_fn=None, **network_kwargs):
@@ -91,7 +91,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     # Get the nb of env
     nenvs = env.num_envs
-    nenvs = num_env
 
     # Get state_space and action_space
     ob_space = env.observation_space
@@ -151,7 +150,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             # Here what we're going to do is for each minibatch calculate the loss and append it.
             mblossvals = []
-            dec_mblossvals = []
+            # dec_mblossvals = []
             if states is None: # nonrecurrent version
                 # Index of each element of batch_size
                 # Create the indices array
@@ -174,7 +173,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         mbenvinds = envinds[start:end]
                         mbflatinds = flatinds[mbenvinds].ravel()
                         slices = (arr[mbflatinds] for arr in (obs, masks, encs))
-                        dec_mblossvals.append(model.dec_train(dec_lr, *slices))
+                        # dec_mblossvals.append(model.dec_train(dec_lr, *slices))
             else: # recurrent version
                 assert nenvs % nminibatches == 0
                 envsperbatch = nenvs // nminibatches
@@ -192,7 +191,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             # Feedforward --> get losses --> update
             lossvals = np.mean(mblossvals, axis=0)
-            dec_lossvals = np.mean(dec_mblossvals, axis=0)
+            dec_lossvals = 0 # np.mean(dec_mblossvals, axis=0)
             # End timer
             tnow = time.perf_counter()
             # Calculate the fps (frame per second)
@@ -216,8 +215,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 logger.logkv('time_elapsed', tnow - tfirststart)
                 for (lossval, lossname) in zip(lossvals, model.loss_names):
                     logger.logkv(lossname, lossval)
-                for (lossval, lossname) in zip(dec_lossvals, model.dec_loss_names):
-                    logger.logkv(lossname, lossval)
+                # for (lossval, lossname) in zip(dec_lossvals, model.dec_loss_names):
+                #     logger.logkv(lossname, lossval)
                 if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                     logger.dumpkvs()
             if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
