@@ -57,12 +57,12 @@ def train(args, extra_args):
     env_type, env_id = get_env_type(args)
     print('env_type: {}'.format(env_type))
 
-    total_timesteps = int(args.num_timesteps)
     seed = args.seed
 
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
+    total_timesteps = int(alg_kwargs['num_timesteps'])
 
     env = build_env(args)
     if args.save_video_interval != 0:

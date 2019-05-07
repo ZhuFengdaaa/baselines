@@ -19,7 +19,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-            dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200,
+            dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200, num_env=8, num_timesteps=500000,
             vf_coef=0.5, sf_coef=0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
             save_interval=0, load_path=None, model_fn=None, **network_kwargs):
@@ -91,6 +91,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     # Get the nb of env
     nenvs = env.num_envs
+    nenvs = num_env
 
     # Get state_space and action_space
     ob_space = env.observation_space
