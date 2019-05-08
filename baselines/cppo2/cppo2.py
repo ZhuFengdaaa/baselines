@@ -94,6 +94,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     # Get state_space and action_space
     ob_space = env.observation_space
+    ob_space1 = env.observation_space1
     ac_space = env.action_space
 
     # Calculate the batch_size
@@ -106,7 +107,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         model_fn = Model
 
     enc_space = env.task_num
-    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
+    model = model_fn(policy=policy, ob_space=ob_space, ob_space1=ob_space1, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
                      nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef,
                      max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size)
 
@@ -151,7 +152,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             # Here what we're going to do is for each minibatch calculate the loss and append it.
             mblossvals = []
-            # dec_mblossvals = []
+            dec_mblossvals = []
             if states is None: # nonrecurrent version
                 # Index of each element of batch_size
                 # Create the indices array
@@ -174,7 +175,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         mbenvinds = envinds[start:end]
                         mbflatinds = flatinds[mbenvinds].ravel()
                         slices = (arr[mbflatinds] for arr in (obs, masks, encs))
-                        # dec_mblossvals.append(model.dec_train(dec_lr, *slices))
+                        dec_mblossvals.append(model.dec_train(dec_lr, *slices))
             else: # recurrent version
                 assert nenvs % nminibatches == 0
                 envsperbatch = nenvs // nminibatches

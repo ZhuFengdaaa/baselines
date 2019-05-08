@@ -10,7 +10,10 @@ def worker(remote, parent_remote, env_fn_wrapper):
     try:
         while True:
             cmd, data = remote.recv()
-            if cmd == 'get_task_name':
+            if cmd == 'get_observation_space1':
+                ob_space = env.observation_space1
+                remote.send((ob_space))
+            elif cmd == 'get_task_name':
                 name = env.get_task_name()
                 remote.send((name))
             elif cmd == 'get_task_enc':
@@ -76,6 +79,12 @@ class SubprocVecEnv(VecEnv):
         observation_space, action_space, self.spec = self.remotes[0].recv()
         self.viewer = None
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
+
+    @property
+    def observation_space1(self):
+        self.remotes[0].send(('get_observation_space1', None))
+        observation_space1 = self.remotes[0].recv()
+        return observation_space1
 
     def step_async(self, actions):
         self._assert_not_closed()

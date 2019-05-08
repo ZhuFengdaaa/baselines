@@ -27,10 +27,11 @@ class Model(object):
     save/load():
     - Save load the model
     """
-    def __init__(self, *, policy, ob_space, ac_space, enc_space, nbatch_act, nbatch_train,
+    def __init__(self, *, policy, ob_space, ob_space1, ac_space, enc_space, nbatch_act, nbatch_train,
             nsteps, ent_coef, vf_coef, sf_coef, max_grad_norm, microbatch_size=None, nenv=1, nsteps_dec=100, dec_batch_size=3200):
         self.sess = sess = get_session()
         self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv, batch_size=dec_batch_size//nsteps_dec)
+        self.ob_space1 = ob_space1.shape[0]
 
         with tf.variable_scope('cppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
@@ -45,8 +46,8 @@ class Model(object):
 
         with tf.variable_scope('dec_model', reuse=tf.AUTO_REUSE):
             nbatch_train_dec = nenv * nsteps_dec
-            self.act_dec = Decoder(nbatch_act, 1, sess, ob_space, enc_space)
-            self.train_dec = Decoder(dec_batch_size, nsteps_dec, sess, ob_space, enc_space)
+            self.act_dec = Decoder(nbatch_act, 1, sess, ob_space1, enc_space)
+            self.train_dec = Decoder(dec_batch_size, nsteps_dec, sess, ob_space1, enc_space)
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])
@@ -162,7 +163,7 @@ class Model(object):
 
     def step(self, observation, **extra_feed):
         actions, values, states, neglogpacs = self.act_model.step(observation, **extra_feed)
-        # dec_r, dec_states = self.act_dec.step(observation, **extra_feed)
+        dec_r, dec_states = self.act_dec.step(observation[:,:self.ob_space1], **extra_feed)
         return actions, values, states, neglogpacs
 
     def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None):
@@ -201,7 +202,7 @@ class Model(object):
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
         dec_S = self.train_dec.initial_state
         dec_map = {
-            self.train_dec.X : batch_episode,
+                self.train_dec.X : batch_episode[:,:self.ob_space1],
             self.train_dec.dec_Z : batch_dec_Z,
             self.train_dec.dec_S : dec_S,
             self.train_dec.dec_M : batch_dec_M,
