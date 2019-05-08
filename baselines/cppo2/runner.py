@@ -31,7 +31,8 @@ class Runner(AbstractEnvRunner):
             enc = self.obs[:, -self.env.task_num:]
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
+            # train decoder
+            actions, values, self.states, neglogpacs,dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
@@ -43,9 +44,9 @@ class Runner(AbstractEnvRunner):
             # Infos contains a ton of useful informations
             self.obs[:], _rewards, self.dones, infos = self.env.step(actions)
             mb_obs1.append(self.obs.copy())
-            rewards = _rewards #  + dec_r * self.dec_r_coef
+            rewards = _rewards + dec_r * self.dec_r_coef  # train decoder
             mb_rewards1.append(_rewards)
-            # mb_rewards2.append(dec_r * self.dec_r_coef)
+            mb_rewards2.append(dec_r * self.dec_r_coef)   # train decoder
             mb_rewards.append(rewards)
             # print(_rewards, dec_r * self.dec_r_coef, rewards)
             for info in infos:

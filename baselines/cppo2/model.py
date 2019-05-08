@@ -164,7 +164,7 @@ class Model(object):
     def step(self, observation, **extra_feed):
         actions, values, states, neglogpacs = self.act_model.step(observation, **extra_feed)
         dec_r, dec_states = self.act_dec.step(observation[:,:self.ob_space1], **extra_feed)
-        return actions, values, states, neglogpacs
+        return actions, values, states, neglogpacs, dec_r, dec_states  # train decoder
 
     def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)

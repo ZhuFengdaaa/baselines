@@ -193,7 +193,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             # Feedforward --> get losses --> update
             lossvals = np.mean(mblossvals, axis=0)
-            dec_lossvals = 0 # np.mean(dec_mblossvals, axis=0)
+            dec_lossvals = np.mean(dec_mblossvals, axis=0)  # trained dec
             # End timer
             tnow = time.perf_counter()
             # Calculate the fps (frame per second)
@@ -217,8 +217,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 logger.logkv('time_elapsed', tnow - tfirststart)
                 for (lossval, lossname) in zip(lossvals, model.loss_names):
                     logger.logkv(lossname, lossval)
-                # for (lossval, lossname) in zip(dec_lossvals, model.dec_loss_names):
-                #     logger.logkv(lossname, lossval)
+                for (lossval, lossname) in zip(dec_lossvals, model.dec_loss_names):
+                    logger.logkv(lossname, lossval)
                 if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                     logger.dumpkvs()
             if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):

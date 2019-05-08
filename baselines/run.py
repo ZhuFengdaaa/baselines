@@ -243,9 +243,9 @@ def main(args):
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
             else:
-                # fixed test bug
-                actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
-                # actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # train decoder
+                actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                 # actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)

@@ -16,16 +16,16 @@ def mujoco():
 
 def maze():
     maze_dict = dict(
-        nsteps=1024,            # 1024
-        nminibatches=16,        # 32
-        dec_lr=0,
+        nsteps=2048,            # 1024
+        nminibatches=32,        # 32
         # num_env=8,
         num_timesteps=1e6,      # 5e5
         sf_coef=0,
-        save_path='../models/fixed_maze20',
-        nsteps_dec=100,
+        dec_lr=1e-3,
         dec_batch_size=3200,
-        dec_r_coef=0,
+        dec_r_coef=3,
+        nsteps_dec=100,
+        save_path='../models/decoder/3_3200_3',
         lam=0.95,
         gamma=0.99,
         noptepochs=10,
