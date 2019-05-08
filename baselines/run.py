@@ -62,7 +62,8 @@ def train(args, extra_args):
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
-    total_timesteps = int(alg_kwargs['num_timesteps'])
+    total_timesteps = min(int(alg_kwargs['num_timesteps']), int(args.num_timesteps))  # fix test bug
+    alg_kwargs['num_timesteps'] = total_timesteps
 
     env = build_env(args)
     if args.save_video_interval != 0:
@@ -212,13 +213,16 @@ def main(args):
 
     model, env = train(args, extra_args)
 
-    if hasattr(args, "save_path") and args.save_path is not None and rank == 0:
-        save_path = osp.expanduser(args.save_path)
-        model.save(save_path)
-
+    # fix test bug
+    if not args.play:
+        if hasattr(args, "save_path") and args.save_path is not None and rank == 0:
+            save_path = osp.expanduser(args.save_path)
+            model.save(save_path)
+    task_count = 0
     if args.play:
-        if args.maze_sample != True:
-            env.set_maze_sample(False)
+        task_count += 1
+        # if args.maze_sample != True: # fixed test bug
+        env.set_maze_sample(False)
         logger.log("Running trained model")
         if hasattr(env.envs[0], "reset_task"):
             env.reset_task()
@@ -239,7 +243,9 @@ def main(args):
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
             else:
-                actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # fixed test bug
+                actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                 # actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)

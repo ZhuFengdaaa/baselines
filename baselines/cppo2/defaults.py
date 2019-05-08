@@ -16,13 +16,13 @@ def mujoco():
 
 def maze():
     maze_dict = dict(
-        nsteps=1024,
-        nminibatches=32,
+        nsteps=1024,            # 1024
+        nminibatches=16,        # 32
         dec_lr=0,
         # num_env=8,
-        num_timesteps=5e5,
+        num_timesteps=1e6,      # 5e5
         sf_coef=0,
-        save_path='models/default',
+        save_path='../models/fixed_maze20',
         nsteps_dec=100,
         dec_batch_size=3200,
         dec_r_coef=0,
@@ -38,9 +38,12 @@ def maze():
     )
     if not os.path.exists(maze_dict['save_path']):
         os.makedirs(maze_dict['save_path'])
-    with open('{}/config.txt'.format(maze_dict['save_path']), 'w+') as f:
-        for key, value in maze_dict.items():
-            f.writelines('{} = {}\n'.format(key, value))
+    if not os.path.exists('{}/config.txt'.format(maze_dict['save_path'])):
+        with open('{}/config.txt'.format(maze_dict['save_path']), 'w+') as f:
+            for key, value in maze_dict.items():
+                f.writelines('{} = {}\n'.format(key, value))
+    else:
+        print('Config exists, might be in testing')
 
     return maze_dict
 
