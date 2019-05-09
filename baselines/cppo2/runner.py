@@ -21,9 +21,10 @@ class Runner(AbstractEnvRunner):
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
-        mb_obs1, mb_rewards1, mb_rewards2 = [], [], []
+        mb_obs1, mb_spred, mb_dones1, mb_rewards1, mb_rewards2 = [], [], [], [], []
         mb_states = self.states
         mb_encs = []
+        mb_rob_states = []
         epinfos = []
         # For n in range number of steps
         self.dec_states = self.model.dec_initial_state
@@ -31,18 +32,22 @@ class Runner(AbstractEnvRunner):
             enc = self.obs[:, -self.env.task_num:]
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
-            actions, values, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
+            actions, values, spred, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
             mb_encs.append(enc)
+            rob_state = self.env.get_task_state()
+            mb_rob_states.append(rob_state)
 
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], _rewards, self.dones, infos = self.env.step(actions)
             mb_obs1.append(self.obs.copy())
+            mb_spred.append(spred)
+            mb_dones1.append(self.dones)
             rewards = _rewards + dec_r * self.dec_r_coef
             mb_rewards1.append(_rewards)
             mb_rewards2.append(dec_r * self.dec_r_coef)
@@ -56,11 +61,13 @@ class Runner(AbstractEnvRunner):
         r2 = np.mean(mb_rewards2)
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_obs1 = np.asarray(mb_obs1, dtype=self.obs.dtype)
+        mb_spred = np.asarray(mb_spred, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
         mb_actions = np.asarray(mb_actions)
         mb_values = np.asarray(mb_values, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
+        mb_dones1 = np.asarray(mb_dones1, dtype=np.bool)
         mb_encs = np.asarray(mb_encs)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
 
@@ -79,8 +86,48 @@ class Runner(AbstractEnvRunner):
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
         # check(mb_encs, mb_dones) # check success
-        return (*map(sf01, (mb_obs, mb_obs1, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_encs)),
-            mb_states, epinfos, r1, r2)
+        epis = clip(mb_obs, mb_actions, mb_rewards, mb_dones, mb_encs, mb_rob_states)
+        return (*map(sf01, (mb_obs, mb_obs1, mb_spred, mb_returns, mb_rewards, mb_dones, mb_dones1, mb_actions, mb_values, mb_neglogpacs, mb_encs)),
+            mb_states, epinfos, r1, r2, epis)
+
+def clip(obs, actions, rewards, masks, encs, rob_states):
+    n, nenv, c = obs.shape
+    epis=[]
+    a=[]
+    s=[]
+    r=[]
+    enc=[]
+    rob_s=[]
+    for i in range(nenv):
+        for j in range(n):
+            if masks[j, i] == True:
+                if len(s)>0:
+                    epis.append(make_epi(a, s, r, rob_s))
+                    a=[]
+                    s=[]
+                    r=[]
+                    enc=[]
+                    rob_s=[]
+            a.append(actions[j,i:])
+            s.append(obs[j,i,:])
+            r.append(rewards[j,i])
+            enc.append(encs[j, i, :])
+            rob_s.append(rob_states[j][i])
+        if len(s)>0:
+                epis.append(make_epi(a, s, r, rob_s))
+                a=[]
+                s=[]
+                r=[]
+                enc=[]
+                rob_s=[]
+    print("generate epis num: ", len(epis))
+    return epis
+
+def make_epi(a, s, r, rob_s):
+    a=np.asarray(a)
+    s=np.asarray(s)
+    r=np.asarray(r)
+    return {"a":a, "s":s, "r":r, "rob_s":rob_s}
 
 def check(encs, dones):
     n, nenv, c = encs.shape

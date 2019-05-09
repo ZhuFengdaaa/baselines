@@ -18,11 +18,12 @@ def constfn(val):
         return val
     return f
 
-def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
+def learn(*, network, env, env2, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             dec_lr=1e-3, dec_r_coef=0, nsteps_dec=100, dec_batch_size=3200,
+            concat_lr=1e-3, concat_coef=0, nsteps_concat=100, concat_batch_size=3200,
             vf_coef=0.5, sf_coef=0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=1, noptepochs=4, cliprange=0.2, save_path=None,
-            save_interval=0, load_path=None, model_fn=None, **network_kwargs):
+            save_interval=0, load_path=None, model_fn=None, num_env=None, num_timesteps=None, **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -94,6 +95,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     # Get state_space and action_space
     ob_space = env.observation_space
+    ob_space1 = env.observation_space1
     ac_space = env.action_space
 
     # Calculate the batch_size
@@ -106,9 +108,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         model_fn = Model
 
     enc_space = env.task_num
-    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
+    model = model_fn(policy=policy, ob_space=ob_space, ob_space1=ob_space1, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
                      nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef,
-                     max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size)
+                     max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size, env2=env2, concat_coef=0, nsteps_concat=nsteps_concat, concat_batch_size=concat_batch_size, gamma=gamma, lam=lam)
 
     env.next_task()
     if load_path is not None:
@@ -140,7 +142,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             # Calculate the cliprange
             cliprangenow = cliprange(frac)
             # Get minibatch
-            obs, obs1, returns, masks, actions, values, neglogpacs, encs, states, epinfos, r1, r2 = runner.run() #pylint: disable=E0632
+            obs, obs1, spred, returns, rewards, masks, masks1, actions, values, neglogpacs, encs, states, epinfos, r1, r2, epis = runner.run() #pylint: disable=E0632
             if eval_env is not None:
                 eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos, enc = eval_runner.run() #pylint: disable=E0632
 
@@ -150,7 +152,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             # Here what we're going to do is for each minibatch calculate the loss and append it.
             mblossvals = []
-            dec_mblossvals = []
+            concat_mblossvals, dec_mblossvals = [], []
             if states is None: # nonrecurrent version
                 # Index of each element of batch_size
                 # Create the indices array
@@ -168,12 +170,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         slices = (arr[mbinds] for arr in (obs, obs1, returns, masks, actions, values, neglogpacs))
                         mblossvals.append(model.train(lrnow, cliprangenow, *slices))
                     np.random.shuffle(envinds)
-                    for start in range(0, nenvs, envsperbatch):
+                    for start in range(0, nenvs, envsperbatch): # number of steps configurable
                         end = start + envsperbatch
                         mbenvinds = envinds[start:end]
                         mbflatinds = flatinds[mbenvinds].ravel()
                         slices = (arr[mbflatinds] for arr in (obs, masks, encs))
                         dec_mblossvals.append(model.dec_train(dec_lr, *slices))
+                concat_mblossvals.append(model.concat_train(concat_lr, epis))
             else: # recurrent version
                 assert nenvs % nminibatches == 0
                 envsperbatch = nenvs // nminibatches
@@ -192,6 +195,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             # Feedforward --> get losses --> update
             lossvals = np.mean(mblossvals, axis=0)
             dec_lossvals = np.mean(dec_mblossvals, axis=0)
+            concat_lossvals = np.mean(concat_mblossvals, axis=0)
             # End timer
             tnow = time.perf_counter()
             # Calculate the fps (frame per second)
@@ -216,6 +220,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 for (lossval, lossname) in zip(lossvals, model.loss_names):
                     logger.logkv(lossname, lossval)
                 for (lossval, lossname) in zip(dec_lossvals, model.dec_loss_names):
+                    logger.logkv(lossname, lossval)
+                for (lossval, lossname) in zip(concat_lossvals, model.concat_loss_names):
                     logger.logkv(lossname, lossval)
                 if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                     logger.dumpkvs()

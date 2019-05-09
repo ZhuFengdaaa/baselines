@@ -11,7 +11,10 @@ class Decoder():
         self.dec_Z = tf.placeholder(tf.float32, [nbatch, enc_space])
         # _h = tf.concat([self.X, self.dec_Z], 1)
         nenv = nbatch // nsteps
-        self.X = tf.placeholder(tf.float32, [nbatch, ob_space.shape[0]]) #mask (done t-1)
+        if X is None:
+            self.X = tf.placeholder(tf.float32, [nbatch, ob_space.shape[0]]) #mask (done t-1)
+        else:
+            self.X = X
         h = tf.layers.flatten(self.X)
         self.dec_M = tf.placeholder(tf.float32, [nbatch]) #mask (done t-1)
         self.dec_S = tf.placeholder(tf.float32, [nenv, 2*nlstm]) # states
@@ -23,8 +26,9 @@ class Decoder():
         else:
             h5, self.snew = utils.lstm(xs, ms, self.dec_S, scope='lstm', nh=nlstm)
             # h5, self.snew = utils.lstm(xs, ms, self.dec_S, scope='lstm', nh=nlstm)
-        h = seq_to_batch(h5)
-        self.h1 = fc(h, 'fc1', nh=enc_space, init_scale=np.sqrt(2))
+        self.h = seq_to_batch(h5)
+        self.h1 = fc(self.h, 'fc1', nh=enc_space, init_scale=np.sqrt(2))
+        self.prob = tf.nn.softmax(self.h1)
         # logq = self.dec_Z * tf.math.log(tf.nn.softmax(self.h1))
         logq = - tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.dec_Z, logits=self.h1)
         logp = self.dec_Z * tf.math.log(z_prob)

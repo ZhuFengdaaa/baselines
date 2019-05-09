@@ -69,3 +69,65 @@ class Memory():
         batch_dec_M = batch_dec_M.reshape(-1)
         assert batch_episode.shape[0] == batch_dec_Z.shape[0] == batch_dec_M.shape[0]
         return batch_episode, batch_dec_Z, batch_dec_M
+
+class EpiMemory():
+    def __init__(self, size=10000, clip_size=100, batch_size=800):
+        self.m=[]
+        self.size = size
+        self.clip_size=clip_size
+        self.batch_size = batch_size
+
+    def set_epi(self, idx, epi):
+        self.m[idx]=epi
+
+    def set(self, epis):
+        for epi in epis:
+            if len(self.m) < self.size:
+                self.m.append(epi)
+            else:
+                _idx = random.randint(0, self.size-1)
+                if _idx < self.size:
+                    self.m[_idx] = epi
+
+    def retrive_memory(self, idx=None, _pos=None):
+        if idx is None:
+            idx = random.randint(0, len(self.m)-1)
+        s = self.m[idx]["s"]
+        r = self.m[idx]["r"]
+        assert(s.shape[0]==r.shape[0])
+        if self.clip_size > s.shape[0]:
+            s = np.concatenate((s, np.ones((self.clip_size - s.shape[0], s.shape[1]))), axis=0)
+            r = np.concatenate((r, np.ones((self.clip_size - r.shape[0]))), axis=0)
+            m = np.concatenate((np.zeros((s.shape[0])), np.ones((self.clip_size - s.shape[0]))), axis=0)
+            rob_s = self.m[idx]["rob_s"][0]
+        else:
+            if _pos is None:
+                _pos = random.randint(0, s.shape[0]-self.clip_size)
+            s = s[_pos:_pos+self.clip_size,:]
+            r = r[_pos:_pos+self.clip_size]
+            m = np.zeros((self.clip_size))
+            rob_s = self.m[idx]["rob_s"][_pos]
+        return s, r, m, rob_s, idx
+        
+    def get(self):
+        batch_s = None
+        batch_r = None
+        batch_m = None
+        batch_rob_s = []
+        batch_idx = []
+        for i in range(self.batch_size):
+            s, r, m, rob_s, idx = self.retrive_memory()
+            s = np.expand_dims(s, 0)
+            r = np.expand_dims(r, 0)
+            m = np.expand_dims(m, 0)
+            if i == 0:
+                batch_s = s
+                batch_r = r
+                batch_m = m
+            else:
+                batch_s = np.concatenate((batch_s, s), axis=0)
+                batch_r = np.concatenate((batch_r, r), axis=0)
+                batch_m = np.concatenate((batch_m, m), axis=0)
+            batch_rob_s.append(rob_s)
+            batch_idx.append(idx)
+        return batch_s, batch_r, batch_m, batch_rob_s, batch_idx

@@ -1,4 +1,5 @@
 import os
+import copy
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
@@ -65,6 +66,13 @@ def train(args, extra_args):
     alg_kwargs.update(extra_args)
 
     env = build_env(args)
+    concat_env = alg_kwargs["concat_batch_size"] // alg_kwargs["nsteps_concat"]
+    if concat_env > 1:
+        args2 = copy.deepcopy(args)
+        args2.num_env = concat_env
+    env2 = build_env(args2)
+    env2.set_maze_sample(False)
+    
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.get_dir(), "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -78,6 +86,7 @@ def train(args, extra_args):
 
     model = learn(
         env=env,
+        env2=env2,
         seed=seed,
         total_timesteps=total_timesteps,
         **alg_kwargs
