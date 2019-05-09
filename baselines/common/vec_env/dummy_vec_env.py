@@ -56,6 +56,10 @@ class DummyVecEnv(VecEnv):
                 self.buf_infos.copy())
 
     @property
+    def observation_space1(self):
+        return self.envs[0].observation_space1
+
+    @property
     def task_enc(self):
         encs = []
         for e in self.envs:
