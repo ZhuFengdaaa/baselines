@@ -110,7 +110,7 @@ def learn(*, network, env, env2, total_timesteps, eval_env = None, seed=None, ns
     enc_space = env.task_num
     model = model_fn(policy=policy, ob_space=ob_space, ob_space1=ob_space1, ac_space=ac_space, enc_space=enc_space, nbatch_act=nenvs,
                      nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef,
-                     max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size, env2=env2, concat_coef=0, nsteps_concat=nsteps_concat, concat_batch_size=concat_batch_size, gamma=gamma, lam=lam)
+                     max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size, env2=env2, concat_coef=concat_coef, nsteps_concat=nsteps_concat, concat_batch_size=concat_batch_size, gamma=gamma, lam=lam)
 
     env.next_task()
     if load_path is not None:
@@ -150,6 +150,20 @@ def learn(*, network, env, env2, total_timesteps, eval_env = None, seed=None, ns
             if eval_env is not None:
                 eval_epinfobuf.extend(eval_epinfos)
 
+            # ugly patch
+            _obs=obs[1:,:]
+            _obs1=obs1[:-1,:]
+            pix_mask = (_obs-_obs1)>0
+            pix_mask=pix_mask.sum(axis=1)
+            masks[:-1]=np.logical_or(masks[:-1],(pix_mask>0))
+            for i in range(masks.shape[0]-1):
+                _obs[i,:] = _obs[i,:] * (1-masks[i])
+                _obs1[i,:] = _obs1[i,:] * (1-masks[i])
+            try:
+                assert(np.array_equal(_obs, _obs1))
+            except:
+                import pdb; pdb.set_trace()
+            
             # Here what we're going to do is for each minibatch calculate the loss and append it.
             mblossvals = []
             concat_mblossvals, dec_mblossvals = [], []

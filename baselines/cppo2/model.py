@@ -97,7 +97,7 @@ class Model(object):
         vf_losses2 = tf.square(vpredclipped - R)
         sf_losses = tf.reduce_mean(tf.abs(spred - S), axis=1) * (1-M)
         print(S, spred, tf.abs(spred - S), M)
-        sf_loss = tf.reduce_mean(sf_losses)
+        sf_loss = tf.reduce_mean(sf_losses) * sf_coef
 
         vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
@@ -115,7 +115,7 @@ class Model(object):
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + sf_loss * sf_coef
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + sf_loss
 
         # dec loss
         self._dec_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.train_dec.dec_Z, logits=self.train_dec.h1)
@@ -123,8 +123,13 @@ class Model(object):
         self.dec_loss = tf.reduce_mean(self._dec_losses2)
 
         # feature loss
-        _h_loss = tf.nn.l2_loss(h_label-self.concat_train_dec.h)  * self.concat_mask
-        self.h_loss = tf.reduce_mean(_h_loss)
+        h_diff = h_label-self.concat_train_dec.h
+        self.h_diff_square = tf.reduce_sum(h_diff*h_diff, 1)
+        self.h_diff_square_mask = tf.math.sqrt(tf.reduce_sum(h_diff*h_diff, 1)) * (1-self.concat_mask)
+        self.h_loss = tf.reduce_sum(self.h_diff_square_mask) * concat_coef
+        self.pt_op1 = tf.print(self.h_diff_square)
+        self.pt_op2 = tf.print(self.h_diff_square_mask)
+        self.pt_op3 = tf.print(self.h_loss)
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
@@ -326,13 +331,13 @@ class Model(object):
             
         # obs, obs1, spred, returns, rewards, masks, masks1, actions, values, neglogpacs, encs, states, epinfos, r1, r2, epis = self.concat_runner.run()
         assert(batch_r.shape==mb_rewards.shape)
-        train_masks = np.full(batch_m.shape, True)
+        train_masks = np.full(batch_m.shape, False)
         for i in range(self.concat_nenvs):
             R1 = self.cal_R(batch_r[i,:], batch_m[i,:])
             R2 = self.cal_R(mb_rewards[i,:], mb_dones[i,:])
             print(R1, R2)
             if R1 > R2: # TODO margin
-                train_masks[i,:] = batch_m[i,:].astype(bool) * mb_dones[i,:].astype(bool)
+                train_masks[i,:] = np.logical_or(batch_m[i,:].astype(bool), mb_dones[i,:].astype(bool))
             else:
                 # R1 < R2, replace memory
                 train_masks[i,:] = True
@@ -364,7 +369,7 @@ class Model(object):
         }
 
         h_loss = self.sess.run(
-            [self.h_loss, self.concat_train_op],
+            [self.h_loss, self.concat_train_op, self.pt_op1, self.pt_op2, self.pt_op3],
             train_map
-        )[:-1]
+        )[:1]
         return h_loss

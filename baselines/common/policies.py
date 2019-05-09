@@ -64,7 +64,7 @@ class PolicyWithValue(object):
             self.vf = self.vf[:,0]
             
         if estimate_s:
-            self.sf = fc(vf_latent, 'sf', env.observation_space.shape[0])
+            self.sf = fc(vf_latent, 'sf', env.observation_space1.shape[0])
             print(self.sf)
 
     def _evaluate(self, variables, observation, **extra_feed):
@@ -94,10 +94,10 @@ class PolicyWithValue(object):
         (action, value estimate, next state, negative log likelihood of the action under current policy parameters) tuple
         """
 
-        a, v, state, neglogp = self._evaluate([self.action, self.vf, self.state, self.neglogp], observation, **extra_feed)
+        a, v, spred, state, neglogp = self._evaluate([self.action, self.vf, self.sf, self.state, self.neglogp], observation, **extra_feed)
         if state.size == 0:
             state = None
-        return a, v, state, neglogp
+        return a, v, spred, state, neglogp
 
     def value(self, ob, *args, **kwargs):
         """
