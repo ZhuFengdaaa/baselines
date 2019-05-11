@@ -183,7 +183,7 @@ class Model(object):
             self.CLIPRANGE : cliprange,
             self.OLDNEGLOGPAC : neglogpacs,
             self.OLDVPRED : values,
-            self.S : obs1,
+            self.S : obs1[:, :self.ob_space1],
             self.M : masks
         }
         if states is not None:
