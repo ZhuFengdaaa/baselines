@@ -23,9 +23,9 @@ def maze():
         sf_coef=0,
         dec_lr=1e-3,
         dec_batch_size=3200,
-        dec_r_coef=0,
+        dec_r_coef=0.003,
         nsteps_dec=100,
-        save_path='../models/decoder/3_3200_0',
+        save_path='../models/2maze/3_3200_0003',
         lam=0.95,
         gamma=0.99,
         noptepochs=10,
@@ -43,7 +43,7 @@ def maze():
             for key, value in maze_dict.items():
                 f.writelines('{} = {}\n'.format(key, value))
     else:
-        print('Config exists, might be in testing')
+        print('Config exists')
 
     return maze_dict
 

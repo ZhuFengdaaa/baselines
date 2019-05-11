@@ -17,6 +17,8 @@ from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
 
+from baselines.cppo2.defaults import maze
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -206,7 +208,7 @@ def main(args):
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
-        logger.configure()
+        logger.configure(dir=maze()['save_path'])  # guanghuixu
     else:
         logger.configure(format_strs=[])
         rank = MPI.COMM_WORLD.Get_rank()

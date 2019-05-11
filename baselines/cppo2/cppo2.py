@@ -11,6 +11,7 @@ try:
 except ImportError:
     MPI = None
 from baselines.cppo2.runner import Runner
+from baselines import logger
 
 
 def constfn(val):
@@ -79,6 +80,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     '''
 
     set_global_seeds(seed)
+    # logger.configure(save_path)
 
     if isinstance(lr, float): lr = constfn(lr)
     else: assert callable(lr)

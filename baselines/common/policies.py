@@ -62,7 +62,7 @@ class PolicyWithValue(object):
         else:
             self.vf = fc(vf_latent, 'vf', 1)
             self.vf = self.vf[:,0]
-
+            
         if estimate_s:
             self.sf = fc(vf_latent, 'sf', env.observation_space1.shape[0])
             print(self.sf)

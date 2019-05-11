@@ -196,7 +196,7 @@ class Model(object):
         )[:-1]
 
         return policy_loss
-
+    
     def dec_train(self, dec_lr, obs, masks, decs):
         self.dec_m.set((obs, decs, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
