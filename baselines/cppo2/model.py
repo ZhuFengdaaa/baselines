@@ -54,7 +54,7 @@ class Model(object):
         self.ADV = ADV = tf.placeholder(tf.float32, [None])
         self.R = R = tf.placeholder(tf.float32, [None])
         self.M = M = tf.placeholder(tf.float32, [None])
-        self.S = S = tf.placeholder(tf.float32, [None, ob_space.shape[0]])
+        self.S = S = tf.placeholder(tf.float32, [None, self.ob_space1])
         # Keep track of old actor
         self.OLDNEGLOGPAC = OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
         # Keep track of old critic
@@ -141,7 +141,7 @@ class Model(object):
         self.loss_names = ['policy_loss', 'value_loss', 'state_loss'
                 , 'policy_entropy', 'approxkl', 'clipfrac']
         self.dec_loss_names = ['dec_loss']
-        self.stats_list = [pg_loss, vf_loss, sf_loss 
+        self.stats_list = [pg_loss, vf_loss, sf_loss
                 , entropy, approxkl, clipfrac]
         self.dec_stats_list = [self.dec_loss]
 
@@ -196,7 +196,7 @@ class Model(object):
         )[:-1]
 
         return policy_loss
-    
+
     def dec_train(self, dec_lr, obs, masks, decs):
         self.dec_m.set((obs, decs, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
