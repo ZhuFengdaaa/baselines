@@ -63,6 +63,10 @@ class DummyVecEnv(VecEnv):
         return np.asarray(encs)
 
     @property
+    def observation_space1(self):
+        return self.envs[0].observation_space1
+
+    @property
     def task_num(self):
         task_num = self.envs[0].maze_dataset.task_num
         for e in self.envs:

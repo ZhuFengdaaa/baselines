@@ -67,12 +67,13 @@ def train(args, extra_args):
 
     env = build_env(args)
     concat_env = alg_kwargs["concat_batch_size"] // alg_kwargs["nsteps_concat"]
+    env2 = None
     if concat_env > 1:
         args2 = copy.deepcopy(args)
         args2.num_env = concat_env
-    env2 = build_env(args2)
-    env2.set_maze_sample(False)
-    
+        env2 = build_env(args2)
+        env2.set_maze_sample(False)
+
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.get_dir(), "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -226,8 +227,7 @@ def main(args):
         model.save(save_path)
 
     if args.play:
-        if args.maze_sample != True:
-            env.set_maze_sample(False)
+        env.set_maze_sample(False)
         logger.log("Running trained model")
         if hasattr(env.envs[0], "reset_task"):
             env.reset_task()
@@ -246,9 +246,9 @@ def main(args):
             if dec_states is None:
                 dec_states = model.dec_initial_state
             if state is not None:
-                actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                actions, _, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
             else:
-                actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                actions, _, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                 # actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)

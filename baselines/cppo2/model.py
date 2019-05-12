@@ -33,7 +33,6 @@ class Model(object):
         self.sess = sess = get_session()
         self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv, batch_size=dec_batch_size//nsteps_dec)
         self.concat_nenvs = concat_nenvs = concat_batch_size//nsteps_concat
-        assert(env2.num_envs == concat_nenvs)
         self.epi_m = EpiMemory(clip_size=nsteps_concat, batch_size=concat_nenvs)
         self.env2 = env2
         self.gamma = gamma
@@ -52,7 +51,7 @@ class Model(object):
                 train_model = policy(microbatch_size, nsteps, sess)
             self.concat_act_model = concat_model_act = policy(concat_nenvs, 1, sess)
             self.concat_train_model = concat_model_train = policy(concat_batch_size, nsteps_concat, sess)
-        
+
         with tf.variable_scope('dec_model', reuse=tf.AUTO_REUSE):
             nbatch_train_dec = nenv * nsteps_dec
             self.act_dec = Decoder(nbatch_act, 1, sess, ob_space1, enc_space)
@@ -173,7 +172,7 @@ class Model(object):
                 , 'policy_entropy', 'approxkl', 'clipfrac']
         self.dec_loss_names = ['dec_loss']
         self.concat_loss_names = ['concat_loss']
-        self.stats_list = [pg_loss, vf_loss, sf_loss 
+        self.stats_list = [pg_loss, vf_loss, sf_loss
                 , entropy, approxkl, clipfrac]
         self.dec_stats_list = [self.dec_loss]
 
@@ -228,7 +227,7 @@ class Model(object):
         )[:-1]
 
         return policy_loss
-    
+
     def dec_train(self, dec_lr, obs, masks, decs):
         self.dec_m.set((obs, decs, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()
@@ -300,7 +299,7 @@ class Model(object):
                 self.concat_act_dec.dec_M : batch_m[:, i]
             }
             actions, h_label, dec_state = self.sess.run(
-                [self.concat_act_model.action, self.concat_act_dec.h, self.concat_act_dec.snew], 
+                [self.concat_act_model.action, self.concat_act_dec.h, self.concat_act_dec.snew],
                 step_map
             )
             mb_obs.append(batch_st)
@@ -328,7 +327,7 @@ class Model(object):
             [self.batch_act_dec.h],
             label_map
         )[0]
-            
+
         # obs, obs1, spred, returns, rewards, masks, masks1, actions, values, neglogpacs, encs, states, epinfos, r1, r2, epis = self.concat_runner.run()
         assert(batch_r.shape==mb_rewards.shape)
         train_masks = np.full(batch_m.shape, False)
