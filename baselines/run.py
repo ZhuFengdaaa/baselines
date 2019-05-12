@@ -215,7 +215,7 @@ def main(args):
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
-        logger.configure()
+        logger.configure(dir=osp.join(extra_args["save_path"], "log"))
     else:
         logger.configure(format_strs=[])
         rank = MPI.COMM_WORLD.Get_rank()
