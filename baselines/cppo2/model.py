@@ -126,9 +126,11 @@ class Model(object):
         self.h_diff_square = tf.reduce_sum(h_diff*h_diff, 1)
         self.h_diff_square_mask = tf.math.sqrt(tf.reduce_sum(h_diff*h_diff, 1)) * (1-self.concat_mask)
         self.h_loss = tf.reduce_sum(self.h_diff_square_mask) * concat_coef
+        self.end2end_div_loss = - self.concat_train_dec.r * 10
+        self.h_loss2 = self.h_loss + self.end2end_div_loss
         self.pt_op1 = tf.print(self.h_diff_square)
         self.pt_op2 = tf.print(self.h_diff_square_mask)
-        self.pt_op3 = tf.print(self.h_loss)
+        self.pt_op3 = tf.print([self.h_loss, self.end2end_div_loss])
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
@@ -143,7 +145,7 @@ class Model(object):
         # 3. Calculate the gradients
         grads_and_var = self.trainer.compute_gradients(loss, params)
         self.dec_grads_and_var = self.trainer.compute_gradients(self.dec_loss, dec_params)
-        concat_grads_and_var = self.trainer.compute_gradients(self.h_loss, concat_params)
+        concat_grads_and_var = self.trainer.compute_gradients(self.h_loss2, concat_params)
 
         grads, var = zip(*grads_and_var)
         self.dec_grads, dec_var = zip(*self.dec_grads_and_var)
@@ -156,7 +158,7 @@ class Model(object):
             # self.dec_global_norm always inf, I dont know why
             self.dec_global_norm = tf.linalg.global_norm(self.dec_grads)
             self.pt = tf.print(self.dec_global_norm)
-            self.dec_grads2, dec_grad_norm = tf.clip_by_global_norm(self.dec_grads, 5)
+            self.dec_grads2, dec_grad_norm = tf.clip_by_global_norm(self.dec_grads, 1.5)
         grads_and_var = list(zip(grads, var))
         self.dec_grads_and_var2 = list(zip(self.dec_grads2, dec_var))
         concat_grads_and_var = list(zip(concat_grads, concat_var))
@@ -285,6 +287,16 @@ class Model(object):
         dec_state = self.concat_act_dec.initial_state
         _batch_s0 = self.env2.get_obs()
         # assert(np.array_equal(batch_s0, _batch_s0))
+        dec_z = []
+        l_z = self.env2.task_num
+        for i in range(len(batch_rob_s)):
+            z = [0 for j in range(l_z)]
+            z[batch_rob_s[i][2]] = 1
+            dec_z.append(z)
+        dec_z = np.asarray(dec_z)
+        dec_z = np.expand_dims(dec_z, 1)
+        dec_z = np.tile(dec_z, (1, self.nsteps_concat, 1))
+        dec_z = dec_z.reshape(-1, dec_z.shape[2])
         batch_st = batch_s0
         mb_obs=[]
         mb_actions=[]
@@ -362,8 +374,10 @@ class Model(object):
             self.concat_train_model.X : mb_obs1,
             self.concat_train_dec.dec_S : dec_state,
             self.concat_train_dec.dec_M : train_masks,
+            self.concat_train_dec.dec_Z : dec_z,
             self.concat_mask: train_masks,
             self.h_label : h_labels,
+            self.LR : concat_lr,
             self.LR : concat_lr,
         }
 
