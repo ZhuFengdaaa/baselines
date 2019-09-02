@@ -64,7 +64,7 @@ def train(args, extra_args):
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
-    total_timesteps = min(int(alg_kwargs['num_timesteps']), int(args.num_timesteps))  # fix test bug
+    total_timesteps = int(args.num_timesteps)  # fix test bug
     alg_kwargs['num_timesteps'] = total_timesteps
 
     env = build_env(args)
@@ -240,15 +240,21 @@ def main(args):
         dec_states = None
         enc = env.task_enc
         while True:
-            if dec_states is None:
-                dec_states = model.dec_initial_state
-            if state is not None:
-                actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+            if args.alg=="cppo2":
+                if dec_states is None:
+                    dec_states = model.dec_initial_state
+                if state is not None:
+                    actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                else:
+                    # actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                    # train decoder
+                    actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                    # actions, _, _, _ = model.step(obs)
             else:
-                # actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
-                # train decoder
-                actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
-                # actions, _, _, _ = model.step(obs)
+                if state is not None:
+                    actions, _, state, _ = model.step(obs,S=state, M=dones)
+                else:
+                    actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0] if isinstance(env, VecEnv) else rew

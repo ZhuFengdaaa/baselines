@@ -1,6 +1,8 @@
 import time
 import functools
 import tensorflow as tf
+import os
+import os.path as osp
 
 from baselines import logger
 
@@ -132,6 +134,9 @@ def learn(
     gamma=0.99,
     log_interval=100,
     load_path=None,
+    num_timesteps=1000000,
+    save_path=None,
+    save_interval=10,
     **network_kwargs):
 
     '''
@@ -205,28 +210,43 @@ def learn(
     # Start total timer
     tstart = time.time()
 
-    for update in range(1, total_timesteps//nbatch+1):
-        # Get mini batch of experiences
-        obs, states, rewards, masks, actions, values, epinfos = runner.run()
-        epinfobuf.extend(epinfos)
+    task_num = env.task_num
+    for i_task in range(task_num):
+        if i_task > 0:
+            env.next_task()
+        for update in range(1, total_timesteps//nbatch+1):
+            # Get mini batch of experiences
+            obs, states, rewards, masks, actions, values, epinfos = runner.run()
+            epinfobuf.extend(epinfos)
 
-        policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
-        nseconds = time.time()-tstart
+            policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
+            nseconds = time.time()-tstart
 
-        # Calculate the fps (frame per second)
-        fps = int((update*nbatch)/nseconds)
-        if update % log_interval == 0 or update == 1:
-            # Calculates if value function is a good predicator of the returns (ev > 1)
-            # or if it's just worse than predicting nothing (ev =< 0)
-            ev = explained_variance(values, rewards)
-            logger.record_tabular("nupdates", update)
-            logger.record_tabular("total_timesteps", update*nbatch)
-            logger.record_tabular("fps", fps)
-            logger.record_tabular("policy_entropy", float(policy_entropy))
-            logger.record_tabular("value_loss", float(value_loss))
-            logger.record_tabular("explained_variance", float(ev))
-            logger.record_tabular("eprewmean", safemean([epinfo['r'] for epinfo in epinfobuf]))
-            logger.record_tabular("eplenmean", safemean([epinfo['l'] for epinfo in epinfobuf]))
-            logger.dump_tabular()
+            # Calculate the fps (frame per second)
+            fps = int((update*nbatch)/nseconds)
+            if update % log_interval == 0 or update == 1:
+                # Calculates if value function is a good predicator of the returns (ev > 1)
+                # or if it's just worse than predicting nothing (ev =< 0)
+                ev = explained_variance(values, rewards)
+                logger.record_tabular("nupdates", update)
+                logger.record_tabular("total_timesteps", update*nbatch)
+                logger.record_tabular("fps", fps)
+                logger.record_tabular("policy_entropy", float(policy_entropy))
+                logger.record_tabular("value_loss", float(value_loss))
+                logger.record_tabular("explained_variance", float(ev))
+                logger.record_tabular("eprewmean", safemean([epinfo['r'] for epinfo in epinfobuf]))
+                logger.record_tabular("eplenmean", safemean([epinfo['l'] for epinfo in epinfobuf]))
+                logger.dump_tabular()
+            if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir():
+                task_name = env.max_task_name
+                if save_path is not None:
+                    checkdir = osp.join(save_path, task_name)
+                else:
+                    checkdir = osp.join(logger.get_dir(), task_name)
+                print(checkdir)
+                os.makedirs(checkdir, exist_ok=True)
+                savepath = osp.join(checkdir, '%.5i'%update)
+                print('Saving to', savepath)
+                model.save(savepath)
     return model
 

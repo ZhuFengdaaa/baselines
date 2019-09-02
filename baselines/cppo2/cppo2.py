@@ -130,11 +130,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     task_num = env.task_num
     # task_num = 2 # fixed maze1
+    print("start training")
     for i_task in range(task_num-1):
         if i_task > 0:
             env.next_task()
         nupdates = total_timesteps//nbatch
         for update in range(1, nupdates+1):
+            print(update)
             assert nbatch % nminibatches == 0
             # Start timer
             tstart = time.perf_counter()
