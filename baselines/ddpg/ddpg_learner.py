@@ -1,4 +1,5 @@
 from copy import copy
+import functools
 from functools import reduce
 
 import numpy as np
@@ -8,6 +9,7 @@ import tensorflow.contrib as tc
 from baselines import logger
 from baselines.common.mpi_adam import MpiAdam
 import baselines.common.tf_util as U
+from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.mpi_running_mean_std import RunningMeanStd
 try:
     from mpi4py import MPI
@@ -77,6 +79,9 @@ class DDPG(object):
         self.critic_target = tf.placeholder(tf.float32, shape=(None, 1), name='critic_target')
         self.param_noise_stddev = tf.placeholder(tf.float32, shape=(), name='param_noise_stddev')
 
+        self.sess = sess = get_session()
+        self.save = functools.partial(save_variables, sess=sess)
+        self.load = functools.partial(load_variables, sess=sess)
         # Parameters.
         self.gamma = gamma
         self.tau = tau
