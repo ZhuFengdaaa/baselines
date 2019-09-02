@@ -236,10 +236,18 @@ def main(args):
         episode_rew = 0
         max_episode = 50
         cnt_episode = 0
+        task_id = 0
+        flag=True
         nsd_dic = {}
         dec_states = None
         enc = env.task_enc
+        res_file = open("res_file.txt", "w")
         while True:
+            if flag==True:
+                res_file.write("# %d %d\n" % (task_id, cnt_episode))
+                flag==False
+            x, y = env.envs[0].wrapped_env.get_body_com("torso")[:2]
+            res_file.write("%f %f\n" % (x, y))
             if args.alg=="cppo2":
                 if dec_states is None:
                     dec_states = model.dec_initial_state
@@ -264,7 +272,7 @@ def main(args):
             if done:
                 dec_states = None
                 # print('episode_rew={}'.format(episode_rew))
-                shorten_dist = env.shorten_dist
+                shorten_dist = max(0, env.shorten_dist)
                 print('# {}: dist={}'.format(cnt_episode, shorten_dist))
                 cnt_episode += 1
                 if env.max_task_name not in nsd_dic.keys():
@@ -273,10 +281,12 @@ def main(args):
                     nsd_dic[env.max_task_name].append(shorten_dist)
                 if cnt_episode > max_episode:
                     cnt_episode = 0
+                    task_id += 1
                     if hasattr(env, "next_task"):
                         if env.next_task() is False:
                             break
                 obs = env.reset()
+                flag=True
         print(nsd_dic)
         task_nsd = []
         for k,v in nsd_dic.items():
