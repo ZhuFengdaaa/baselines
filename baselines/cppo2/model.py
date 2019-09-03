@@ -31,6 +31,7 @@ class Model(object):
             nsteps, ent_coef, vf_coef, sf_coef, max_grad_norm, microbatch_size=None, nenv=1, nsteps_dec=100, dec_batch_size=3200):
         self.sess = sess = get_session()
         self.dec_m = Memory(clip_size=nsteps_dec, nenv=nenv, batch_size=dec_batch_size//nsteps_dec)
+        self.ob_space = ob_space.shape[0]
         self.ob_space1 = ob_space1.shape[0]
 
         with tf.variable_scope('cppo2_model', reuse=tf.AUTO_REUSE):
@@ -162,9 +163,9 @@ class Model(object):
             sync_from_root(sess, global_variables) #pylint: disable=E1101
 
     def step(self, observation, **extra_feed):
-        actions, values, states, neglogpacs = self.act_model.step(observation, **extra_feed)
+        actions, values, states, neglogpacs, entropy = self.act_model.step(observation, **extra_feed)
         dec_r, dec_states = self.act_dec.step(observation[:,:self.ob_space1], **extra_feed)
-        return actions, values, states, neglogpacs, dec_r, dec_states  # train decoder
+        return actions, values, states, neglogpacs, dec_r, dec_states, entropy  # train decoder
 
     def train(self, lr, cliprange, obs, obs1, returns, masks, actions, values, neglogpacs, states=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
@@ -196,7 +197,7 @@ class Model(object):
         )[:-1]
 
         return policy_loss
-    
+
     def dec_train(self, dec_lr, obs, masks, decs):
         self.dec_m.set((obs, decs, masks))
         batch_episode, batch_dec_Z, batch_dec_M =self.dec_m.get()

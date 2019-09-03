@@ -113,7 +113,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                      nbatch_train=nbatch_train,nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, sf_coef=sf_coef,
                      max_grad_norm=max_grad_norm, nenv=nenvs, nsteps_dec=nsteps_dec, dec_batch_size=dec_batch_size)
 
-    env.next_task() # fixed maze1
     if load_path is not None:
         model.load(load_path)
     # Instantiate the runner object
@@ -130,7 +129,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     task_num = env.task_num
     # task_num = 2 # fixed maze1
-    print("start training")
     for i_task in range(task_num-1):
         if i_task > 0:
             env.next_task()

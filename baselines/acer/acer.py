@@ -61,7 +61,7 @@ class Model(object):
                  c, trust_region, alpha, delta):
 
         sess = get_session()
-        nact = ac_space.n
+        nact = ac_space.shape[0]
         nbatch = nenvs * nsteps
 
         A = tf.placeholder(tf.int32, [nbatch]) # actions
@@ -274,6 +274,9 @@ class Acer():
 def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=0.5, ent_coef=0.01,
           max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
           log_interval=100, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
+          save_path=None,
+          save_interval=0,
+          num_timesteps=1000000,
           trust_region=True, alpha=0.99, delta=1, load_path=None, **network_kwargs):
 
     '''
@@ -367,11 +370,26 @@ def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=
     acer = Acer(runner, model, buffer, log_interval)
     acer.tstart = time.time()
 
-    for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
-        acer.call(on_policy=True)
-        if replay_ratio > 0 and buffer.has_atleast(replay_start):
-            n = np.random.poisson(replay_ratio)
-            for _ in range(n):
-                acer.call(on_policy=False)  # no simulation steps in this
-
+    task_num = env.task_num
+    for i_task in range(task_num-1):
+        if i_task > 0:
+            env.next_task()
+        nupdates = total_timesteps//nbatch
+        for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
+            acer.call(on_policy=True)
+            if replay_ratio > 0 and buffer.has_atleast(replay_start):
+                n = np.random.poisson(replay_ratio)
+                for _ in range(n):
+                    acer.call(on_policy=False)  # no simulation steps in this
+            if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir():
+                task_name = env.max_task_name
+                if save_path is not None:
+                    checkdir = osp.join(save_path, task_name)
+                else:
+                    checkdir = osp.join(logger.get_dir(), task_name)
+                print(checkdir)
+                os.makedirs(checkdir, exist_ok=True)
+                savepath = osp.join(checkdir, '%.5i'%update)
+                print('Saving to', savepath)
+                model.save(savepath)
     return model

@@ -43,6 +43,7 @@ def learn(network, env,
           tau=0.01,
           eval_env=None,
           save_path=None,
+          load_path=None,
           num_timesteps=1e6,
           param_noise_adaption_interval=50,
           **network_kwargs):
@@ -54,7 +55,7 @@ def learn(network, env,
         nb_epochs = int(total_timesteps) // (nb_epoch_cycles * nb_rollout_steps)
     else:
         nb_epochs = 50
-    nb_epochs = 50
+    nb_epochs = 0
 
     if MPI is not None:
         rank = MPI.COMM_WORLD.Get_rank()
@@ -102,7 +103,10 @@ def learn(network, env,
     episode_rewards_history = deque(maxlen=100)
     sess = U.get_session()
     # Prepare everything.
-    agent.initialize(sess)
+    if load_path is not None:
+        agent.load(load_path)
+    else:
+        agent.initialize(sess)
     sess.graph.finalize()
 
     agent.reset()
@@ -118,8 +122,6 @@ def learn(network, env,
     t = 0 # scalar
 
     epoch = 0
-
-
 
     start_time = time.time()
 

@@ -234,53 +234,65 @@ def main(args):
         dones = np.zeros((1,))
 
         episode_rew = 0
-        max_episode = 50
-        cnt_episode = 0
+        episode_rew_cnt = 0
+        # max_episode = 50
+        max_episode = 5
+        cnt_episode = 1
         task_id = 0
         flag=True
         nsd_dic = {}
+        succeed = {}
         dec_states = None
         enc = env.task_enc
-        res_file = open("res_file.txt", "w")
+        res_file = open("res_file3.txt", "w")
+        entropys = []
         while True:
             if flag==True:
                 res_file.write("# %d %d\n" % (task_id, cnt_episode))
-                flag==False
+                flag=False
             x, y = env.envs[0].wrapped_env.get_body_com("torso")[:2]
-            res_file.write("%f %f\n" % (x, y))
+            _x, _y = env.envs[0].normalize(x,y)
+            res_file.write("%f %f\n" % (_x, _y))
             if args.alg=="cppo2":
                 if dec_states is None:
                     dec_states = model.dec_initial_state
                 if state is not None:
-                    actions, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                    actions, values, state, neglogpacs = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                 else:
                     # actions, _, state, _ = model.step(obs, S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                     # train decoder
-                    actions, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                    actions, values, state, neglogpacs, dec_r, dec_states, entropy = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                     # actions, _, _, _ = model.step(obs)
+                    entropys.append(entropy)
             else:
                 if state is not None:
                     actions, _, state, _ = model.step(obs,S=state, M=dones)
                 else:
                     actions, _, _, _ = model.step(obs)
 
-            obs, rew, done, _ = env.step(actions)
+            obs, rew, done, info = env.step(actions)
             episode_rew += rew[0] if isinstance(env, VecEnv) else rew
+            episode_rew_cnt +=1
             if args.render:
                 env.render()
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
+                info = info[0]
                 dec_states = None
-                # print('episode_rew={}'.format(episode_rew))
+                print('episode_rew={}'.format(episode_rew/episode_rew_cnt))
                 shorten_dist = max(0, env.shorten_dist)
                 print('# {}: dist={}'.format(cnt_episode, shorten_dist))
                 cnt_episode += 1
                 if env.max_task_name not in nsd_dic.keys():
                     nsd_dic[env.max_task_name] = []
+                    succeed[env.max_task_name] = []
+                nsd_dic[env.max_task_name].append(shorten_dist)
+                if "succeed" in info and info["succeed"] == 1:
+                    succeed[env.max_task_name].append(1)
                 else:
-                    nsd_dic[env.max_task_name].append(shorten_dist)
+                    succeed[env.max_task_name].append(0)
                 if cnt_episode > max_episode:
-                    cnt_episode = 0
+                    cnt_episode = 1
                     task_id += 1
                     if hasattr(env, "next_task"):
                         if env.next_task() is False:
@@ -289,15 +301,27 @@ def main(args):
                 flag=True
         print(nsd_dic)
         task_nsd = []
+        task_spl = []
+        shortest_len = {
+                "line200": 8,
+                "corner00": 8,
+                "corner10": 16,
+                "empty00": 8,
+                "empty10": 12,
+                "maze100": 16,
+                "maze200": 16,
+                "maze210": 16
+                }
         for k,v in nsd_dic.items():
             assert(type(v) == list)
             nsd = sum(v)/len(v)
+            spl = sum(i[0] * i[1] for i in zip(nsd_dic[k], succeed[k]))/len(v)/shortest_len[k]
             task_nsd.append(nsd)
-            print("{}: {}".format(k, nsd))
+            task_spl.append(spl)
+            print("{}: nsd {} spl {}".format(k, nsd, spl))
         nsd = sum(task_nsd)/len(task_nsd)
-        print("total nsd: {}".format(nsd))
-
-
+        spl = sum(task_spl)/len(task_spl)
+        print("total nsd {} spl {}".format(nsd, spl))
 
     env.close()
 
