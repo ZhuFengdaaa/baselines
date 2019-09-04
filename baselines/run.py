@@ -235,8 +235,8 @@ def main(args):
 
         episode_rew = 0
         episode_rew_cnt = 0
-        # max_episode = 50
-        max_episode = 5
+        max_episode = 100
+        # max_episode = 5
         cnt_episode = 1
         task_id = 0
         flag=True
@@ -244,7 +244,7 @@ def main(args):
         succeed = {}
         dec_states = None
         enc = env.task_enc
-        res_file = open("res_file3.txt", "w")
+        res_file = open("res_file17.txt", "w")
         entropys = []
         while True:
             if flag==True:

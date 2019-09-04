@@ -55,7 +55,7 @@ class Model(object):
         self.ADV = ADV = tf.placeholder(tf.float32, [None])
         self.R = R = tf.placeholder(tf.float32, [None])
         self.M = M = tf.placeholder(tf.float32, [None])
-        self.S = S = tf.placeholder(tf.float32, [None, self.ob_space1])
+        self.S = S = tf.placeholder(tf.float32, [None, self.ob_space])
         # Keep track of old actor
         self.OLDNEGLOGPAC = OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
         # Keep track of old critic
