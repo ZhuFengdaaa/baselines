@@ -1,4 +1,5 @@
 import os
+import copy
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
@@ -65,6 +66,14 @@ def train(args, extra_args):
     alg_kwargs.update(extra_args)
 
     env = build_env(args)
+    concat_env = alg_kwargs["concat_batch_size"] // alg_kwargs["nsteps_concat"]
+    env2 = None
+    if concat_env > 1:
+        args2 = copy.deepcopy(args)
+        args2.num_env = concat_env
+        env2 = build_env(args2)
+        env2.set_maze_sample(False)
+
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.get_dir(), "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -78,6 +87,7 @@ def train(args, extra_args):
 
     model = learn(
         env=env,
+        env2=env2,
         seed=seed,
         total_timesteps=total_timesteps,
         **alg_kwargs
@@ -205,7 +215,7 @@ def main(args):
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
-        logger.configure()
+        logger.configure(dir=osp.join(extra_args["save_path"], "log"))
     else:
         logger.configure(format_strs=[])
         rank = MPI.COMM_WORLD.Get_rank()
@@ -217,6 +227,7 @@ def main(args):
         model.save(save_path)
 
     if args.play:
+        env.set_maze_sample(False)
         logger.log("Running trained model")
         if hasattr(env.envs[0], "reset_task"):
             env.reset_task()
@@ -226,28 +237,52 @@ def main(args):
         dones = np.zeros((1,))
 
         episode_rew = 0
-        max_episode = 5
+        max_episode = 50
         cnt_episode = 0
+        nsd_dic = {}
+        dec_states = None
+        enc = env.task_enc
         while True:
+            if dec_states is None:
+                dec_states = model.dec_initial_state
             if state is not None:
-                actions, _, state, _ = model.step(obs,S=state, M=dones)
+                actions, _, _, state, _ = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
             else:
-                actions, _, _, _ = model.step(obs)
+                actions, _, _, state, _, _, dec_states = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
+                # actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew[0] if isinstance(env, VecEnv) else rew
-            env.render()
+            if args.render:
+                env.render()
             done = done.any() if isinstance(done, np.ndarray) else done
             if done:
-                print('episode_rew={}'.format(episode_rew))
+                dec_states = None
+                # print('episode_rew={}'.format(episode_rew))
+                shorten_dist = env.shorten_dist
+                print('# {}: dist={}'.format(cnt_episode, shorten_dist))
                 cnt_episode += 1
-                print(cnt_episode)
-                episode_rew = 0
-                obs = env.reset()
+                if env.max_task_name not in nsd_dic.keys():
+                    nsd_dic[env.max_task_name] = []
+                else:
+                    nsd_dic[env.max_task_name].append(shorten_dist)
                 if cnt_episode > max_episode:
                     cnt_episode = 0
                     if hasattr(env, "next_task"):
-                        env.next_task()
+                        if env.next_task() is False:
+                            break
+                obs = env.reset()
+        print(nsd_dic)
+        task_nsd = []
+        for k,v in nsd_dic.items():
+            assert(type(v) == list)
+            nsd = sum(v)/len(v)
+            task_nsd.append(nsd)
+            print("{}: {}".format(k, nsd))
+        nsd = sum(task_nsd)/len(task_nsd)
+        print("total nsd: {}".format(nsd))
+
+
 
     env.close()
 

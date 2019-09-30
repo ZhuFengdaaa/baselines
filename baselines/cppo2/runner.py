@@ -8,45 +8,67 @@ class Runner(AbstractEnvRunner):
     - Initialize the runner
 
     run():
-    - Make a mini batch
     """
-    def __init__(self, *, env, model, nsteps, gamma, lam):
+    def __init__(self, *, env, model, nsteps, gamma, lam, dec_r_coef=0.0):
         super().__init__(env=env, model=model, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
         # Discount rate
         self.gamma = gamma
+        self.dec_states = model.dec_initial_state
+        self.dec_r_coef = dec_r_coef
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
+        mb_obs1, mb_spred, mb_dones1, mb_rewards1, mb_rewards2 = [], [], [], [], []
         mb_states = self.states
+        mb_encs = []
+        mb_rob_states = []
         epinfos = []
         # For n in range number of steps
+        self.dec_states = self.model.dec_initial_state
         for _ in range(self.nsteps):
+            enc = self.obs[:, -self.env.task_num:]
             # Given observations, get action value and neglopacs
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, S=self.states, M=self.dones)
+            actions, values, spred, self.states, neglogpacs, dec_r, self.dec_states = self.model.step(self.obs, S=self.states, M=self.dones, dec_S=self.dec_states, dec_M=self.dones, dec_Z=enc)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
+            mb_encs.append(enc)
+            rob_state = self.env.get_task_state()
+            mb_rob_states.append(rob_state)
 
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
-            self.obs[:], rewards, self.dones, infos = self.env.step(actions)
+            self.obs[:], _rewards, self.dones, infos = self.env.step(actions)
+            mb_obs1.append(self.obs.copy())
+            mb_spred.append(spred)
+            mb_dones1.append(self.dones)
+            rewards = _rewards + dec_r * self.dec_r_coef
+            mb_rewards1.append(_rewards)
+            mb_rewards2.append(dec_r * self.dec_r_coef)
+            mb_rewards.append(rewards)
+            # print(_rewards, dec_r * self.dec_r_coef, rewards)
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
-            mb_rewards.append(rewards)
         #batch of steps to batch of rollouts
+        r1 = np.mean(mb_rewards1)
+        r2 = np.mean(mb_rewards2)
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
+        mb_obs1 = np.asarray(mb_obs1, dtype=self.obs.dtype)
+        mb_spred = np.asarray(mb_spred, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
         mb_actions = np.asarray(mb_actions)
         mb_values = np.asarray(mb_values, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
+        mb_dones1 = np.asarray(mb_dones1, dtype=np.bool)
+        mb_encs = np.asarray(mb_encs)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
 
         # discount/bootstrap off value fn
@@ -63,8 +85,70 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
-            mb_states, epinfos)
+        # check(mb_encs, mb_dones) # check success
+        epis = clip(mb_obs, mb_actions, mb_rewards, mb_dones, mb_encs, mb_rob_states)
+        return (*map(sf01, (mb_obs, mb_obs1, mb_spred, mb_returns, mb_rewards, mb_dones, mb_dones1, mb_actions, mb_values, mb_neglogpacs, mb_encs)),
+            mb_states, epinfos, r1, r2, epis)
+
+def clip(obs, actions, rewards, masks, encs, rob_states):
+    n, nenv, c = obs.shape
+    epis=[]
+    a=[]
+    s=[]
+    r=[]
+    enc=[]
+    rob_s=[]
+    for i in range(nenv):
+        for j in range(n):
+            if masks[j, i] == True:
+                if len(s)>0:
+                    epis.append(make_epi(a, s, r, rob_s))
+                    a=[]
+                    s=[]
+                    r=[]
+                    enc=[]
+                    rob_s=[]
+            a.append(actions[j,i:])
+            s.append(obs[j,i,:])
+            r.append(rewards[j,i])
+            enc.append(encs[j, i, :])
+            rob_s.append(rob_states[j][i])
+        if len(s)>0:
+                epis.append(make_epi(a, s, r, rob_s))
+                a=[]
+                s=[]
+                r=[]
+                enc=[]
+                rob_s=[]
+    print("generate epis num: ", len(epis))
+    return epis
+
+def make_epi(a, s, r, rob_s):
+    a=np.asarray(a)
+    s=np.asarray(s)
+    r=np.asarray(r)
+    return {"a":a, "s":s, "r":r, "rob_s":rob_s}
+
+def check(encs, dones):
+    n, nenv, c = encs.shape
+    nd, nenvd = dones.shape
+    assert(n==nd and nenv==nenvd)
+    for i in range(n-1):
+        for j in range(nenv):
+            if dones[i,j] == False:
+                try:
+                    assert(np.array_equal(encs[i,j,:],encs[i+1,j,:])==True)
+                except:
+                    print(i, j, dones[i,j], encs[i,j,:], encs[i+1,j,:])
+                    import pdb; pdb.set_trace()
+            if np.array_equal(encs[i,j,:],encs[i+1,j,:])==False:
+                try:
+                    assert(dones[i,j] == True)
+                except:
+                    print(i, j, dones[i,j], encs[i,j,:], encs[i+1,j,:])
+                    import pdb; pdb.set_trace()
+
+
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """

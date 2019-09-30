@@ -55,17 +55,38 @@ class DummyVecEnv(VecEnv):
         return (self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones),
                 self.buf_infos.copy())
 
-    def get_task_num(self):
+    @property
+    def task_enc(self):
+        encs = []
+        for e in self.envs:
+            encs.append(e.get_current_enc())
+        return np.asarray(encs)
+
+    @property
+    def observation_space1(self):
+        return self.envs[0].observation_space1
+
+    @property
+    def task_num(self):
         task_num = self.envs[0].maze_dataset.task_num
         for e in self.envs:
             if task_num != e.maze_dataset.task_num:
                 assert(False)
         return task_num
 
-    def get_task_name(self):
-        task_name = self.envs[0].maze_dataset.get_curr_maze()[0]
+    @property
+    def shorten_dist(self):
+        return self.envs[0].shorten_dist
+
+    def set_maze_sample(self, maze_sample):
         for e in self.envs:
-            if task_name != e.maze_dataset.get_curr_maze()[0]:
+            e.maze_dataset.sample = maze_sample
+
+    @property
+    def max_task_name(self):
+        task_name = self.envs[0].maze_dataset.get_maze()[0]
+        for e in self.envs:
+            if task_name != e.maze_dataset.get_maze()[0]:
                 assert(False)
         return task_name
 
@@ -74,8 +95,10 @@ class DummyVecEnv(VecEnv):
             self.envs[e].reset_task()
 
     def next_task(self):
+        state = True
         for e in range(self.num_envs):
-            self.envs[e].next_task()
+            state = state and self.envs[e].next_task()
+        return state
 
     def reset(self):
         for e in range(self.num_envs):

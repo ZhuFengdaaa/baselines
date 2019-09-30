@@ -10,10 +10,31 @@ def worker(remote, parent_remote, env_fn_wrapper):
     try:
         while True:
             cmd, data = remote.recv()
-            if cmd == 'get_task_name':
+            if cmd == 'get_observation_space1':
+                ob_space = env.observation_space1
+                remote.send((ob_space))
+            elif cmd == 'get_obs':
+                obs = env.get_obs()
+                remote.send((obs))
+            elif cmd == 'set_maze_sample':
+                result = env.set_maze_sample(data)
+                remote.send((result))
+            elif cmd == 'get_task_state':
+                result = env.get_task_state()
+                remote.send((result))
+            elif cmd == 'set_task_state':
+                try:
+                    result = env.set_task_state(*data)
+                except:
+                    import pdb; pdb.set_trace()
+                remote.send((result))
+            elif cmd == 'get_task_name':
                 name = env.get_task_name()
                 remote.send((name))
-            if cmd == 'get_max_task_name':
+            elif cmd == 'get_task_enc':
+                name = env.get_current_enc()
+                remote.send((name))
+            elif cmd == 'get_max_task_name':
                 name = env.get_max_task_name()
                 remote.send((name))
             elif cmd == 'get_task_num':
@@ -74,6 +95,24 @@ class SubprocVecEnv(VecEnv):
         self.viewer = None
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
 
+    def get_obs(self):
+        mb_obs = None
+        for i in range(len(self.remotes)):
+            self.remotes[i].send(('get_obs', None))
+            obs = self.remotes[i].recv()
+            obs = np.expand_dims(obs, axis=0)
+            if mb_obs is None:
+                mb_obs = obs
+            else:
+                mb_obs = np.concatenate((mb_obs, obs), axis=0)
+        return mb_obs
+
+    @property
+    def observation_space1(self):
+        self.remotes[0].send(('get_observation_space1', None))
+        observation_space1 = self.remotes[0].recv()
+        return observation_space1
+
     def step_async(self, actions):
         self._assert_not_closed()
         for remote, action in zip(self.remotes, actions):
@@ -122,6 +161,78 @@ class SubprocVecEnv(VecEnv):
         result = self.remotes[0].recv()
         self.waiting = False
         return result
+
+    @property
+    def task_enc(self):
+        self.get_task_enc_async()
+        return self.get_task_enc_wait()
+
+    def get_task_enc_async(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+           remote.send(("get_task_enc", None)) 
+        self.waiting = True
+    
+    def get_task_enc_wait(self):
+        self._assert_not_closed()
+        results = np.asarray([remote.recv() for remote in self.remotes])
+        self.waiting = False
+        return results
+
+    def set_maze_sample(self, state):
+        self.set_maze_sample_async(state)
+        return self.set_maze_sample_wait()
+
+    def set_maze_sample_async(self, state):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            remote.send(("set_maze_sample", state))
+        self.waiting = True
+
+    def set_maze_sample_wait(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            result = remote.recv()
+            assert(result==True)
+        self.waiting = False
+
+    def get_task_state(self):
+        self.get_task_state_async()
+        return self.get_task_state_wait()
+
+    def get_task_state_async(self):
+        self._assert_not_closed()
+        for i in range(len(self.remotes)):
+            self.remotes[i].send(("get_task_state", None))
+        self.waiting = True
+
+    def get_task_state_wait(self):
+        self._assert_not_closed()
+        rob_state_list = []
+        for remote in self.remotes:
+            (qpos, qvel, e_id) = remote.recv()
+            rob_state_list.append((qpos, qvel, e_id))
+        self.waiting = False
+        return rob_state_list
+
+    def set_task_state(self, batch_rob_s):
+        self.set_task_state_async(batch_rob_s)
+        return self.set_task_state_wait()
+
+    def set_task_state_async(self, batch_rob_s):
+        self._assert_not_closed()
+        assert(len(batch_rob_s)==len(self.remotes))
+        for i in range(len(self.remotes)):
+            self.remotes[i].send(("set_task_state", batch_rob_s[i]))
+        self.waiting = True
+
+    def set_task_state_wait(self):
+        self._assert_not_closed()
+        for remote in self.remotes:
+            result = remote.recv()
+            assert(result == True)
+        self.waiting = False
+        return True
 
     @property
     def task_name(self):
