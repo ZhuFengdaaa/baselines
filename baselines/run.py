@@ -235,8 +235,8 @@ def main(args):
 
         episode_rew = 0
         episode_rew_cnt = 0
-        max_episode = 100
-        # max_episode = 5
+        # max_episode = 100
+        max_episode = 5
         cnt_episode = 1
         task_id = 0
         flag=True
@@ -244,7 +244,7 @@ def main(args):
         succeed = {}
         dec_states = None
         enc = env.task_enc
-        res_file = open("res_file17.txt", "w")
+        res_file = open("useless.txt", "w")
         entropys = []
         while True:
             if flag==True:
@@ -264,6 +264,7 @@ def main(args):
                     actions, values, state, neglogpacs, dec_r, dec_states, entropy = model.step(obs,S=state, M=dones, dec_S=dec_states, dec_M=dones, dec_Z=enc)
                     # actions, _, _, _ = model.step(obs)
                     entropys.append(entropy)
+                    # print(sum(entropys)/len(entropys))
             else:
                 if state is not None:
                     actions, _, state, _ = model.step(obs,S=state, M=dones)
